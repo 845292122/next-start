@@ -1,0 +1,160 @@
+{
+	"Meta": {
+		"title": "Next Start",
+		"description": "A full-stack Next.js project template"
+	},
+	"Nav": {
+		"mainNav": "Main navigation",
+		"dashboard": "Overview",
+		"notes": "Notes",
+		"settings": "Settings",
+		"new": "New",
+		"loading": "Loading page"
+	},
+	"Account": {
+		"label": "Account",
+		"signOut": "Sign out"
+	},
+	"ColorMode": {
+		"light": "light",
+		"dark": "dark",
+		"switchTo": "Switch to {mode}",
+		"switchToAria": "Switch to {mode} mode"
+	},
+	"Locale": {
+		"label": "Language",
+		"switchLanguage": "Switch language",
+		"zh": "简体中文",
+		"en": "English"
+	},
+	"Dashboard": {
+		"eyebrow": "HeroUI · semantic design tokens",
+		"title": "Design system at a glance",
+		"description": "This page lays out the theme's semantic colors and the components in common use. A HeroUI theme is just a set of CSS variables — edit the ones in <code>src/app/globals.css</code> and every component follows.",
+		"stats": {
+			"layout": {
+				"label": "Layout",
+				"value": "Nav rail",
+				"hint": "Rail + content area + page transition"
+			},
+			"theme": {
+				"label": "Theme",
+				"value": "CSS variables",
+				"hint": "Semantic color roles, light and dark handled"
+			},
+			"platform": {
+				"label": "Platform",
+				"value": "Web + SSR",
+				"hint": "Server and client components share one stylesheet"
+			}
+		},
+		"palette": {
+			"title": "Semantic color roles",
+			"note": "Each role is a set of variables: a base, a readable foreground, and a low-emphasis soft pair. Retheming means editing variables, not components"
+		},
+		"buttons": {
+			"title": "Buttons",
+			"note": "HeroUI's variant system: primary / secondary / tertiary / outline / ghost / danger"
+		},
+		"chips": {
+			"title": "Chips and messages",
+			"note": "Chip is the status label (HeroUI's Badge is an overlay indicator, not a label); toast replaces the notifications component",
+			"default": "Default",
+			"live": "Live",
+			"buildFailed": "Build failed",
+			"archived": "Archived",
+			"toastTrigger": "Success toast",
+			"toastSuccess": "Deploy finished",
+			"toastDangerTrigger": "Failure toast",
+			"toastDanger": "Deploy failed — check the logs"
+		},
+		"form": {
+			"title": "Form controls",
+			"note": "TextField composes Label / Input / FieldError; the focus ring uses the accent color",
+			"projectName": "Project name",
+			"remark": "Note",
+			"remarkPlaceholder": "Optional",
+			"notify": "Send me build notifications"
+		},
+		"controls": {
+			"title": "Selection and progress",
+			"note": "ToggleButtonGroup / Slider / ProgressBar — all compound components",
+			"compact": "Compact",
+			"comfortable": "Comfortable",
+			"spacious": "Spacious",
+			"volumeLabel": "Volume",
+			"volume": "Volume {value, number}%",
+			"buildProgress": "Build progress"
+		},
+		"surfaces": {
+			"title": "Alerts and overlays",
+			"note": "Alert's semantic status colors, plus Tooltip",
+			"alertTitle": "This is a {status} alert",
+			"alertBody": "Alert colors come from the semantic variables, so retheming doesn't touch this.",
+			"tooltipTrigger": "Hover for a tooltip",
+			"tooltipBody": "Tooltips are driven by react-aria, so keyboard focus opens them too"
+		}
+	},
+	"Notes": {
+		"title": "Notes",
+		"description": "The template's one complete example: SQLite table → drizzle service → both exposure paths (Server Action and route handler) → HeroUI UI. Delete the whole domain if you don't need it.",
+		"titleLabel": "Title",
+		"titlePlaceholder": "What do you want to remember?",
+		"bodyLabel": "Body",
+		"bodyPlaceholder": "Optional",
+		"submit": "Add",
+		"created": "Note added",
+		"createFailed": "Could not add the note",
+		"updateFailed": "Could not update the note",
+		"deleteFailed": "Could not delete the note",
+		"searchLabel": "Search notes",
+		"searchPlaceholder": "Search by title (case-insensitive)",
+		"toggleLabel": "Mark \"{title}\" done or not done",
+		"deleteLabel": "Delete \"{title}\"",
+		"empty": "No notes yet",
+		"emptyHint": "Add your first one with the form above.",
+		"noResults": "No matching notes",
+		"noResultsHint": "Try a different keyword."
+	},
+	"Settings": {
+		"title": "Settings",
+		"description": "A placeholder page. To add one: create a directory under src/app/[locale]/(app), then add an entry to src/components/layout/NavLinks.ts.",
+		"appearance": {
+			"title": "Appearance",
+			"current": "Currently: {mode}",
+			"followingSystem": " (following the system)",
+			"system": "System",
+			"light": "Light",
+			"dark": "Dark"
+		},
+		"notifications": {
+			"title": "Notifications",
+			"note": "Placeholder switches — wire them to your own preference store",
+			"buildDone": "Notify me when a build finishes",
+			"deployFailed": "Notify me when a deploy fails",
+			"weeklyDigest": "Weekly digest email"
+		}
+	},
+	"Login": {
+		"title": "Sign in",
+		"artLabel": "Illustration of a person waving beside a plant",
+		"socialHeading": "Use your WeChat account",
+		"socialSubmit": "Sign in with WeChat (not wired)",
+		"emailDivider": "Or use your email",
+		"emailLabel": "Email",
+		"emailPlaceholder": "Your email",
+		"passwordLabel": "Password",
+		"passwordPlaceholder": "Password",
+		"submit": "Continue",
+		"invalidCredentials": "That email and password don't match.",
+		"demoHint": "Demo account: demo@example.com / demo1234",
+		"forgotPassword": "Forgot your password?",
+		"noAccount": "No account yet?",
+		"createAccount": "Sign up"
+	},
+	"Errors": {
+		"forbidden": "Your account doesn't have access to this page. Ask an administrator if you need it.",
+		"notFound": "There's no page at this address. Check the link, or start over from the home page.",
+		"backHome": "Back to home"
+	}
+}

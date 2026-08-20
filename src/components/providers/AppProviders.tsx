@@ -1,0 +1,62 @@
+'use client'
+
+import { I18nProvider, RouterProvider, Toast } from '@heroui/react'
+import type { Session } from 'next-auth'
+import { SessionProvider } from 'next-auth/react'
+import { useLocale } from 'next-intl'
+import { ThemeProvider } from 'next-themes'
+import { SWRConfig } from 'swr'
+import { useRouter } from '@/i18n/navigation'
+import { fetcher } from '@/lib/fetcher'
+
+/**
+ * Every client-side provider the app needs, in one place. HeroUI v3 has no
+ * single HeroUIProvider of its own — it's built on react-aria-components, whose
+ * concerns (routing, locale, toast queue) are separate providers.
+ */
+export function AppProviders({
+	children,
+	session,
+}: {
+	children: React.ReactNode
+	session: Session | null
+}) {
+	const locale = useLocale()
+	const router = useRouter()
+
+	return (
+		<SessionProvider session={session}>
+			{/*
+			 * attribute="class" writes class="light" / class="dark" on <html>, which
+			 * is exactly what HeroUI's theme variables key off (see
+			 * @heroui/styles/dist/themes/default/variables.css).
+			 *
+			 * next-themes rather than HeroUI's own useTheme(): that hook applies the
+			 * theme in a layout effect after hydration, so a user who prefers dark
+			 * gets one frame of light first. next-themes injects a blocking script
+			 * into <head> and gets it right before the first paint.
+			 */}
+			<ThemeProvider
+				attribute="class"
+				defaultTheme="system"
+				enableSystem
+				disableTransitionOnChange
+			>
+				{/* Drives react-aria's date, number and collation formatting. */}
+				<I18nProvider locale={locale}>
+					{/*
+					 * Without this, `href` on a HeroUI Button/Link is a plain <a> and
+					 * every click is a full page load. next-intl's router is used rather
+					 * than Next's so the locale prefix is applied.
+					 */}
+					<RouterProvider navigate={(href) => router.push(href)}>
+						<SWRConfig value={{ fetcher }}>
+							<Toast.Provider placement="bottom end" />
+							{children}
+						</SWRConfig>
+					</RouterProvider>
+				</I18nProvider>
+			</ThemeProvider>
+		</SessionProvider>
+	)
+}
