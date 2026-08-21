@@ -5,6 +5,7 @@
 开箱即用的部分：中英双语路由、明暗主题、手机号+验证码登录（带路由守卫）、一条完整的
 「建表 → service → Server Action → 界面」示例（`/notes`），一套 Server Action 和 Route Handler
 共用的错误契约（含错误边界），请求 id 贯穿的结构化日志（带脱敏）+ `/api/health`，
+一套实测过不误伤应用的安全响应头（nonce CSP / HSTS / …）和登录限流，
 以及 lint / typecheck / 单测 / 组件测试 / E2E 五条流水线。
 
 > **动手前先读 [DEVELOPMENT.md](DEVELOPMENT.md)** —— 分层规则、命名约定和一堆踩过的坑都在那里。
@@ -68,8 +69,9 @@ bun run dev
    `src/app/api/notes/`、`src/app/[locale]/(app)/notes/`，以及 `NavLinks.ts` 里那一条、
    `e2e/notes.e2e.ts` 和 `e2e/api-errors.e2e.ts`。
    > `src/core/` 下的 `errors.ts` / `action.ts` / `http.ts` / `validation.ts` /
-   > `request-id.ts`、`src/instrumentation.ts`、`src/app/api/health/`，以及它们的
-   > `*.test.ts` 和 `e2e/observability.e2e.ts` **都不要删**——那是错误契约和可观测性的地基，
-   > 不属于示例业务。
+   > `request-id.ts` / `security-headers.ts` / `rate-limit.ts` / `zod-config.ts`、
+   > `src/instrumentation.ts`、`src/app/api/health/`，以及它们的 `*.test.ts` 和
+   > `e2e/observability.e2e.ts` / `e2e/security.e2e.ts` **都不要删**——那是错误契约、
+   > 可观测性和安全的地基，不属于示例业务。
 3. `src/app/[locale]/(app)/dashboard/page.tsx` 是主题展示页，真业务落地后整页删掉。
 4. 加自己的业务：照 [DEVELOPMENT.md 的标准流程](DEVELOPMENT.md#新增业务的标准流程)走。

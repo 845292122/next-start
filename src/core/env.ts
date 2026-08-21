@@ -12,6 +12,13 @@ export const env = createEnv({
 		// tests set.
 		DATABASE_URL: z.string().min(1).default('./data/dev.db'),
 		AUTH_SECRET: z.string().min(1),
+		// The app's canonical origin, e.g. https://example.com. Optional, but
+		// production should set it: without it Auth.js derives callback and redirect
+		// URLs from the request's Host header, which anything in front of the app can
+		// set. See the note on `trustHost` in core/auth/config.ts. Read by Auth.js
+		// straight from process.env — declared here so it's discoverable and
+		// validated, and so instrumentation.ts can warn when it's missing.
+		AUTH_URL: z.url().optional(),
 		LOG_LEVEL: z
 			.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace'])
 			.default('info'),
@@ -27,6 +34,7 @@ export const env = createEnv({
 		NODE_ENV: process.env.NODE_ENV,
 		DATABASE_URL: process.env.DATABASE_URL,
 		AUTH_SECRET: process.env.AUTH_SECRET,
+		AUTH_URL: process.env.AUTH_URL,
 		LOG_LEVEL: process.env.LOG_LEVEL,
 		RESEND_API_KEY: process.env.RESEND_API_KEY,
 		EMAIL_FROM: process.env.EMAIL_FROM,

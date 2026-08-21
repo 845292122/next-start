@@ -15,9 +15,18 @@ import { useRouter } from '@/i18n/navigation'
 export function AppProviders({
 	children,
 	session,
+	nonce,
 }: {
 	children: React.ReactNode
 	session: Session | null
+	/**
+	 * The CSP nonce, read from the request by `app/[locale]/layout.tsx`.
+	 *
+	 * Only next-themes needs it: it renders its own inline `<script>`, and a
+	 * nonce-based CSP blocks that unless it's tagged. Everything Next generates
+	 * gets a nonce automatically.
+	 */
+	nonce?: string
 }) {
 	const locale = useLocale()
 	const router = useRouter()
@@ -39,6 +48,7 @@ export function AppProviders({
 				defaultTheme="system"
 				enableSystem
 				disableTransitionOnChange
+				nonce={nonce}
 			>
 				{/* Drives react-aria's date, number and collation formatting. */}
 				<I18nProvider locale={locale}>

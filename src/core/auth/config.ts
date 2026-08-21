@@ -11,6 +11,8 @@ import {
 	verificationTokensTable,
 } from '@/core/db/schema'
 import { env } from '@/core/env'
+import { logger } from '@/core/logger'
+import { signInLimiter } from '@/core/rate-limit'
 
 declare module 'next-auth' {
 	interface Session {
@@ -38,8 +40,16 @@ export const authConfig: NextAuthConfig = {
 	// never persists a session row for the credentials user.
 	session: { strategy: 'jwt' },
 	secret: env.AUTH_SECRET,
-	// self-hosted (non-Vercel) deployments don't get a canonical host injected
-	// automatically — without this, Auth.js rejects requests with UntrustedHost.
+	// Self-hosted (non-Vercel) deployments don't get a canonical host injected
+	// automatically — without this, Auth.js rejects every request with
+	// UntrustedHost, so a zero-config `bun run start` wouldn't work at all.
+	//
+	// The cost is real, though: with it on and `AUTH_URL` unset, Auth.js derives
+	// callback and redirect URLs from the incoming `Host` header, which anything in
+	// front of the app can set. **Set `AUTH_URL` in production** — then the
+	// canonical origin comes from configuration and the Host header stops
+	// mattering. `instrumentation.ts` logs a warning at boot if it's missing, and
+	// `DEVELOPMENT.md` covers the reverse-proxy side.
 	trustHost: true,
 	pages: {
 		// Without this, an unauthenticated Auth.js redirect lands on its own
@@ -57,6 +67,23 @@ export const authConfig: NextAuthConfig = {
 			async authorize(credentials) {
 				const parsed = phoneOtpSchema.safeParse(credentials)
 				if (!parsed.success) return null
+
+				// Rate limited *before* the code is compared, and keyed by phone — see
+				// core/rate-limit.ts. Without this a 6-digit code is walkable: nothing
+				// else here costs an attacker anything per attempt.
+				//
+				// Returning null rather than throwing, so the client sees the same
+				// "wrong code" outcome either way. Telling an attacker "you are being
+				// throttled" hands them the information needed to pace around it, and
+				// Auth.js has no channel for a distinct code here anyway.
+				const limit = signInLimiter.check(`signin:${parsed.data.phone}`)
+				if (!limit.allowed) {
+					logger.warn(
+						{ retryAfterMs: limit.retryAfterMs },
+						'sign-in rate limit hit',
+					)
+					return null
+				}
 
 				// See core/auth/otp.ts — this is a fixed demo code, not a real
 				// per-phone verification.

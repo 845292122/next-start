@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { headers } from 'next/headers'
 import { notFound } from 'next/navigation'
 import { hasLocale, NextIntlClientProvider } from 'next-intl'
 import { getTranslations, setRequestLocale } from 'next-intl/server'
@@ -48,6 +49,13 @@ export default async function RootLayout({
 
 	const session = await auth()
 
+	// next-themes injects a blocking inline <script>, which a nonce-based CSP
+	// blocks unless it carries the nonce. Next attaches the nonce to its *own*
+	// scripts automatically but knows nothing about this one, so it's forwarded by
+	// hand. Get this wrong and the symptom is precisely what next-themes is here to
+	// prevent: a frame of light theme before hydration. See src/proxy.ts.
+	const nonce = (await headers()).get('x-nonce') ?? undefined
+
 	return (
 		// suppressHydrationWarning is required by next-themes: its blocking script
 		// writes class="light|dark" on this element before React hydrates, so the
@@ -64,7 +72,9 @@ export default async function RootLayout({
 					 * The rail lives in app/[locale]/(app)/layout.tsx, not here — the
 					 * (auth) group renders full-screen without it.
 					 */}
-					<AppProviders session={session}>{children}</AppProviders>
+					<AppProviders session={session} nonce={nonce}>
+						{children}
+					</AppProviders>
 				</NextIntlClientProvider>
 			</body>
 		</html>

@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import '@/core/zod-config'
 
 /**
  * No real SMS provider is wired anywhere in this template — see

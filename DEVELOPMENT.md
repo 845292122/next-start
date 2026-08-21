@@ -13,6 +13,7 @@
 - [数据层](#数据层)
 - [错误处理](#错误处理)
 - [可观测性](#可观测性)
+- [安全](#安全)
 - [UI 与主题](#ui-与主题)
   - [什么该写进 globals.css](#什么该写进-globalscss)
 - [认证](#认证)
@@ -151,6 +152,9 @@ src/core/
 ├── env.ts              # 全项目唯一读 process.env 的地方，Zod 校验
 ├── logger.ts           # pino 实例 + 脱敏 + loggablePath()
 ├── request-id.ts       # x-request-id 的来源与读取，见[可观测性](#可观测性)
+├── security-headers.ts # CSP 与固定安全响应头的值，见[安全](#安全)
+├── rate-limit.ts       # 内存限流器（单实例够用，多实例要换 Redis）
+├── zod-config.ts       # 浏览器里关掉 zod 的 JIT（CSP 会把它当 eval）
 ├── errors.ts           # 错误词表：AppError 及子类，每个带一个 code
 ├── action-result.ts    # ActionResult 类型。types-only，客户端可以 import
 ├── action.ts           # runAction / runPublicAction —— Server Action 的运行器
@@ -199,7 +203,7 @@ src/core/
 | `drizzle/` | `drizzle-kit generate` 生成的迁移 SQL 和 `meta/` 快照。**进版本库，不手改** |
 | `drizzle.config.ts` | drizzle-kit 的配置：dialect、schema 路径、输出目录、连接串 |
 | `src/i18n/` | next-intl 的配置与文案，见[国际化](#国际化) |
-| `src/proxy.ts` | Next 16 的中间件（旧名 `middleware.ts`）。**只做 locale 解析 + 注入 `x-request-id`，不管登录态**。Next 16 起默认跑 Node runtime |
+| `src/proxy.ts` | Next 16 的中间件（旧名 `middleware.ts`）。**做 locale 解析 + 注入 `x-request-id` + 每请求 CSP nonce，不管登录态**。Next 16 起默认跑 Node runtime |
 | `src/instrumentation.ts` | `onRequestError`：接住渲染期异常，把 digest 和真实堆栈写在一起，见[可观测性](#可观测性) |
 | `src/lib/` | 不属于某个业务域的通用工具：目前只有 `action-error.ts`（把 `ActionResult` 的 `code` 翻成文案，见[错误处理](#错误处理)） |
 | `src/types/messages.d.ts` | 把 `zh.json` 的形状喂给 next-intl 的 `AppConfig`，让 `t('key')` 受类型检查 |
@@ -209,7 +213,7 @@ src/core/
 | `biome.json` | 格式化 + lint + import 排序规则 |
 | `playwright.config.ts` | E2E 配置：setup project + `webServer` 跑 db:reset → build → start |
 | `postcss.config.mjs` | 只有 `@tailwindcss/postcss` 一个插件 |
-| `next.config.ts` | next-intl 插件 + `serverExternalPackages`（libsql 的原生模块不能打包） |
+| `next.config.ts` | next-intl 插件 + `serverExternalPackages`（libsql 的原生模块不能打包）+ 固定安全响应头 |
 | `AGENTS.md` / `CLAUDE.md` | 给 AI 助手的项目说明。那段 Next.js 提示是 `next dev` 自动写入的，别手删 |
 
 ## 分层与依赖方向
@@ -607,6 +611,119 @@ per-request 包装器的位置，而实际会打日志的地方只有 `runAction
 - **故意不鉴权**，所以返回体形状是固定的：只有 `status`，没有版本、没有路径、没有失败原因。
   失败原因进日志。`e2e/observability.e2e.ts` 有一条用例专门断言"不需要 session"——将来改
   鉴权时它会挡住"健康检查悄悄变成 401"，那在负载均衡看来就是把实例踢出轮转。
+
+## 安全
+
+### 响应头分两处下发
+
+| 放哪 | 下发什么 | 为什么 |
+| --- | --- | --- |
+| `next.config.ts` 的 `headers()` | 所有**固定值**的头 | 它作用于**每一个**响应，包括 `/api/*` 和静态资源——而 proxy 的 matcher 把这些排除了。JSON 接口上的 `nosniff` 正是最需要它的场合 |
+| `src/proxy.ts` | `Content-Security-Policy` | 它需要每请求一个新 nonce，而只有 proxy 能生成 |
+
+值都在 [src/core/security-headers.ts](src/core/security-headers.ts)，这样它们能被单测，而不是
+埋在配置文件里靠肉眼看。
+
+两个不是随手写的默认值：
+
+- **HSTS 只在生产下发。** 把 `localhost` 钉成 https 是**单向操作**，之后 `bun run dev` 会一直
+  坏掉，直到手动去浏览器设置里清掉。而浏览器在 http 上本来就忽略 HSTS，所以开发环境不发它
+  一点损失都没有，却避开一个真实的坑。
+- **HSTS 不带 `preload`。** 那意味着把域名提交到浏览器内置列表里，撤销极其麻烦。这应该是个
+  深思熟虑的决定，不该从模板里继承。
+
+### CSP：脚本严，样式松，这是权衡不是偷懒
+
+`script-src` 是 nonce + `'strict-dynamic'`——真正阻止注入脚本执行的就是这一条。
+`style-src` 只做到 `'unsafe-inline'`。原因值得完整记下来，因为它反直觉：
+
+**react-aria（HeroUI 的底座）会在运行时注入自己的 `<style>` 元素**
+（`[data-react-aria-pressable] { touch-action: ... }`），它没有 nonce，react-aria 也没有提供
+传 nonce 的入口。
+
+而 CSP 规范堵死了那个显而易见的绕法：**一个 directive 里只要出现 nonce 或 hash，
+`'unsafe-inline'` 就会被忽略。** 所以 `style-src` 做不到"我们的样式用 nonce、它的用
+unsafe-inline"——只能二选一。
+
+于是只有三条路，本项目选了第三条：
+
+1. **只用 nonce** → react-aria 那张样式表被拒。实测过：规则被丢掉，唯一症状是触摸设备上的
+   触摸行为退化。安静，而且恰好坏在最不容易被测到的环境里。
+2. **nonce + react-aria CSS 的 `'sha256-...'`** → 能跑的最严方案，但哈希钉在第三方的内部
+   样式表上，一次 patch 升级就失效。而哈希失效时最顺手的"修法"是把它删掉——那就退回第 1 条
+   的静默故障。
+3. **样式放开 `'unsafe-inline'`** → 现在的做法。注入的 CSS 能污染页面、能通过选择器外泄一些
+   属性值，但**不能执行脚本**。在 `script-src` 保持严格的前提下，这是更小的风险，而且不会腐烂。
+
+`e2e/security.e2e.ts` 断言生产策略下**零** CSP 违规，所以哪天需要重新审视，测试会先说话。
+
+### 两个必须手工接线的 nonce 消费者
+
+Next 会自动把 nonce 打到它**自己**生成的东西上（框架脚本、页面 chunk、它自己的内联样式）。
+它不认识的就得自己接：
+
+- **next-themes 的阻塞脚本。** `app/[locale]/layout.tsx` 读 `x-nonce` 传给
+  `AppProviders` → `ThemeProvider` 的 `nonce` prop。接错了的症状恰恰是 next-themes 被选进来
+  要解决的那个问题：hydration 之前闪一帧浅色。`e2e/security.e2e.ts` 有一条用例断言
+  `<html>` 上有 `light|dark` class，就是守这个。
+- **CSP header 必须同时设在请求和响应上。** 响应那份是浏览器执行的；**请求那份是 Next 用来
+  解析出 nonce 并打到自己脚本上的**——只设响应，Next 自己的脚本就全部没有 nonce。
+
+### zod 的 JIT 会被当成 eval
+
+zod 4 用 `new Function` 把 object schema 编译成快速校验器，严格 CSP 视其为 `eval`。
+浏览器里每次 `zodResolver` 校验都会撞 `script-src`——这就是 `e2e/security.e2e.ts` 在登录页
+抓到的 `script-src: eval` 违规。
+
+[src/core/zod-config.ts](src/core/zod-config.ts) 在**浏览器里**关掉 JIT。另一条路是给生产
+`script-src` 加 `'unsafe-eval'`，那会把唯一真正拦住注入脚本的 directive 废掉。表单校验少一次
+JIT 完全无感——一个表单几个字段，不是热循环。**服务端的 JIT 保留**：服务端没有 CSP，而校验量
+其实都在那边。
+
+> `globalConfig.jitless` 是在 schema **parse 时**读的，不是构造时，所以只要在第一次 parse
+> 之前跑到就行。它由 `core/auth/schema.ts` 和 `features/notes/schema.ts` 以副作用 import 引入，
+> 这样任何能 parse 的客户端代码必然先加载了它。**客户端要用的新 schema 模块也得 import 它。**
+
+### 限流
+
+[src/core/rate-limit.ts](src/core/rate-limit.ts)，挂在 `authorize()` 上，**按手机号**限流，
+5 次 / 10 分钟。没有它，6 位验证码是可以被走完的——这里没有任何东西让攻击者每次尝试付出代价。
+
+- **在比对验证码之前限流**，否则限流本身就没意义。
+- **拒绝时返回 `null`，和验证码错误长得一模一样。** 告诉攻击者"你被限流了"，等于把节奏信息
+  交给他。Auth.js 在这里也没有单独的 code 通道。
+- **按手机号而不是按 IP。** 威胁是"猜*这个号*的码"，而换 IP 很容易、换目标号就没意义了。
+  按 IP 还会把一个 NAT 后面的所有用户误判成同一个客户端。生产环境应该两者都做，IP 取自
+  **你自己的反代设置的头**，绝不能信客户端传的 `X-Forwarded-For`。
+- ⚠️ **状态在进程内存里。** 两个实例各放行一份配额；Serverless 上按请求起实例的话等于没有
+  限流。它对本模板面向的单实例部署是真实防线，对更大的部署是**占位**——保留 `RateLimiter`
+  接口，换成 Redis/Upstash 实现即可，所有调用点都是写在接口上的。
+
+### `trustHost` 与反向代理
+
+`trustHost: true` 是开着的，否则自托管部署下 Auth.js 会用 UntrustedHost 拒掉每一个请求，
+零配置的 `bun run start` 根本跑不起来。
+
+代价是真实的：开着它且 `AUTH_URL` 未设时，Auth.js 从进来的 `Host` 头推导回调和跳转 URL，
+而那个头是应用前面任何一环都能设的。**所以生产要设 `AUTH_URL`**——设了之后规范化的 origin
+来自配置，Host 头就不再要紧。`src/instrumentation.ts` 的 `register()` 会在生产环境缺
+`AUTH_URL` 时打一条启动告警（告警而不是拒绝启动：把一条加固建议变成升级即停机不合适）。
+
+反代那一侧也要做对：把 `Host` 固定成规范域名，别原样透传客户端传来的值。
+
+### Route Handler 为什么没有 CSRF token
+
+`/api/notes/[id]` 的 PATCH / DELETE 靠 cookie 鉴权，没有 CSRF token。这是**安全的**，但理由
+必须写清楚，否则下一个人加个接口就出事：
+
+- Auth.js 的会话 cookie 是 `SameSite=Lax`，跨站发起的请求带不上它。
+- PATCH / DELETE 不是 CSP 意义上的"简单请求"，会触发 CORS 预检，而我们没有放行任何跨源。
+
+**所以这两条前提哪条被打破，就必须补 CSRF 防护**：把 cookie 改成 `SameSite=None`（比如为了
+嵌入第三方页面），或者加了宽松的 CORS 头，或者新增一个用 `POST` + 表单编码的接口
+（那种是简单请求，不触发预检）。
+
+Server Action 不在此列——它自带 origin 校验。
 
 ## UI 与主题
 
@@ -1029,6 +1146,9 @@ stat -f %m data/dev.db && bun run test:unit && stat -f %m data/dev.db   # 两个
   `app/api/notes/` 真的接上了它——那里面每一个状态码在包装器出现之前都是 500
 - **`e2e/observability.e2e.ts` 守请求 id 链路和健康检查。** 这两样没法单测：整件事的前提是
   `src/proxy.ts` 真的在跑，而 proxy 只存在于一个运行中的 Next 服务里
+- **`e2e/security.e2e.ts` 守 CSP 和限流。** 单测只能断言 header 的**值**，断言不了浏览器在这个
+  策略下还愿不愿意跑这个应用——而 CSP 失败是安静的：页面照样加载，某个脚本或样式悄悄没生效，
+  什么都不抛。所以那里有专门收集控制台 CSP 违规、并断言为空的用例
 - 浏览器语言在 `playwright.config.ts` 里锁成了 `zh-CN`，所以不带前缀的 URL 断言拿到的是中文；
   要测英文就显式访问 `/en/...`
 
@@ -1160,6 +1280,7 @@ fetcher，在 fetcher 里把 `ActionResult` 拆开（失败就 `throw`，这样 
 | --- | --- | --- | --- |
 | `DATABASE_URL` | 否 | `./data/dev.db` | SQLite **文件路径**（不是 URL）。`:memory:` 也认 |
 | `AUTH_SECRET` | **是** | — | Auth.js 签 JWT，缺了直接启动失败 |
+| `AUTH_URL` | 否（**生产应设**） | — | 本部署的规范 origin。不设时 Auth.js 从 `Host` 头推导回调 URL，见[安全](#安全)。缺失时 `register()` 会打启动告警 |
 | `LOG_LEVEL` | 否 | `info` | pino 级别 |
 | `RESEND_API_KEY` | 否 | — | 不填时 `sendEmail()` 只打 warn 不发信 |
 | `EMAIL_FROM` | 否 | `onboarding@resend.dev` | 发件地址。默认是 Resend 的共享测试发件人，**只能发给 API key 所属的那个邮箱**，上线前换成自有已验证域名的地址 |
@@ -1183,15 +1304,14 @@ CI（`.github/workflows/ci.yml`）四个并行 job：`lint` / `typecheck` / `tes
 1. **手机验证码是固定演示码，没有接真实短信厂商。** `src/core/auth/otp.ts` 不生成、不存储、
    不发送任何验证码——`authorize()` 直接比对 `DEMO_VERIFICATION_CODE`（`123456`）。真要上线
    之前必须换掉，见[认证](#认证)一节。
-2. **没有任何限流。** `authorize()` 可以被无限次调用来爆破验证码；换成真 OTP 之后，发码接口
-   被刷等于直接的短信账单。`core/errors.ts` 已经预留了 `RateLimitedError` / `RATE_LIMITED`
-   （429），但还没有任何地方抛它，也还没有限流器。
-3. **没有安全响应头。** `next.config.ts` 里没有 `headers()`：没有 CSP、HSTS、
-   `X-Content-Type-Options`、`Referrer-Policy`、`frame-ancestors`。CSP 要用 nonce 的话在
-   `src/proxy.ts` 里生成——那个文件已经是组合式的（见[可观测性](#可观测性)），加一段进去就行。
-4. **`onRequestError` 只写日志，没有接错误上报服务。** 形状是对的，但生产环境应该换成
-   Sentry / OTel，见[可观测性](#可观测性)。也没有 `register()`，没有 tracing。
-5. **错误边界没有常驻的自动化测试。** 渲染出来的部分由
+2. **限流器的状态在进程内存里。** 登录已经限流了（见[安全](#安全)），但两个实例各放行一份
+   配额，Serverless 上等于没限流。单实例部署够用，更大的部署要保留 `RateLimiter` 接口换成
+   Redis/Upstash。另外**只有登录被限流**——换成真 OTP 后，发码接口也必须限，否则被刷等于
+   直接的短信账单。
+3. **`onRequestError` 只写日志，没有接错误上报服务。** 形状是对的，但生产环境应该换成
+   Sentry / OTel，见[可观测性](#可观测性)。`register()` 目前只做 `AUTH_URL` 启动检查，
+   没有 tracing。
+4. **错误边界没有常驻的自动化测试。** 渲染出来的部分由
    [ErrorState.test.tsx](src/components/ui/ErrorState.test.tsx) 覆盖，但"边界有没有真的接上"
    要靠一条故意抛错的路由，模板里不想常留这种东西。改完 `error.tsx` 之后照下面这样验一次
    （两个 `error.tsx` 都是这么验过的）：
@@ -1215,31 +1335,31 @@ CI（`.github/workflows/ci.yml`）四个并行 job：`lint` / `typecheck` / `tes
 
    `global-error.tsx` 要触发得让 `[locale]/layout.tsx` 自己抛错，代价比较大，一般改完它
    肉眼过一遍就行。
-6. **`src/core/storage/local-stub.ts` 只是占位**，写本地磁盘。真要用文件存储就照 `StorageAdapter`
+5. **`src/core/storage/local-stub.ts` 只是占位**，写本地磁盘。真要用文件存储就照 `StorageAdapter`
    接口换成 S3/R2 实现。
-7. **403 页没有任何地方会跳转过去。** 登录拦截解决的是"未登录"（弹到 `/login`），而项目里还没有
+6. **403 页没有任何地方会跳转过去。** 登录拦截解决的是"未登录"（弹到 `/login`），而项目里还没有
    角色模型，所以没有"已登录但无权限"这种情况。加了角色判断之后，service 抛 `ForbiddenError`
    （`core/errors.ts` 里已经有了），让页面 `redirect('/403')`。
    > 另一条路是 Next 的 `forbidden()` / `unauthorized()` 加 `forbidden.tsx` /
    > `unauthorized.tsx`，能顺手填掉这个缺口。**本项目刻意没走这条**：它需要打开
    > `experimental.authInterrupts`，模板不想依赖实验性 API；而且它靠抛中断工作，会被
    > `runAction` / `withHandler` 的 try/catch 影响（要靠 `unstable_rethrow` 放行）。
-8. **`listNotes` 没有分页。** 一个 `select *` 全表返回。`notes` 是[标准流程](#新增业务的标准流程)
+7. **`listNotes` 没有分页。** 一个 `select *` 全表返回。`notes` 是[标准流程](#新增业务的标准流程)
    会被照抄的模板，所以这条会传染到真实业务表上。另外搜索用的
    `like(lower(title), '%q%')` 没有转义用户输入里的 `%` / `_`（搜 `%` 匹配全部），
    而 `lower()` 也让索引失效。
-9. **`notesTable` 只有 `createdAt`，没有 `updatedAt`**，也没有软删除。多数生产表需要前者
+8. **`notesTable` 只有 `createdAt`，没有 `updatedAt`**，也没有软删除。多数生产表需要前者
    （Drizzle 的 `$onUpdate`）。
-10. **一个 `db.transaction()` 示例都没有**，[标准流程](#新增业务的标准流程)里也没提。真实业务
-    （下单、扣库存）少不了它。
-11. **登录页的微信按钮是禁用的占位。** 后端没有对应 provider，接法见
+9. **一个 `db.transaction()` 示例都没有**，[标准流程](#新增业务的标准流程)里也没提。真实业务
+   （下单、扣库存）少不了它。
+10. **登录页的微信按钮是禁用的占位。** 后端没有对应 provider，接法见
     `src/core/auth/config.ts` 的 `providers`。
-12. **没有 `authenticator` 表。** `@auth/drizzle-adapter` 的 WebAuthn 方法会去查它，
+11. **没有 `authenticator` 表。** `@auth/drizzle-adapter` 的 WebAuthn 方法会去查它，
     表不存在时那些方法运行时会炸。本模板不用 WebAuthn，所以没建；要用的话往
     `src/core/db/schema.ts` 里补一个，并把它传给 `DrizzleAdapter`。
-13. **英文文案是从中文翻译来的占位内容**，dashboard 和登录页左侧插画那些都是展示用的样例文字，
+12. **英文文案是从中文翻译来的占位内容**，dashboard 和登录页左侧插画那些都是展示用的样例文字，
     不是真实业务文案。
-14. **`/dashboard` 和 `/notes` 都是给你删的。** 前者是设计系统活文档，后者是业务示例。
+13. **`/dashboard` 和 `/notes` 都是给你删的。** 前者是设计系统活文档，后者是业务示例。
 
 ### 主动放弃的东西（不是缺口）
 

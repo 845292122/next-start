@@ -23,6 +23,13 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
   `loggablePath()` (`src/core/logger.ts`) because OAuth callbacks carry an exchangeable `code` in
   the query string; pino's key-based redaction cannot see inside a string. Same reason messages
   must stay free of PII — `phone` is this app's login identity.
+- **A strict CSP is enforced — check `src/core/security-headers.ts` before adding anything
+  inline.** Scripts are nonce + `'strict-dynamic'`; there is no `'unsafe-eval'` in production, so
+  any library that compiles code at runtime will be refused (this is why
+  `src/core/zod-config.ts` disables zod's JIT in the browser). A third-party inline `<script>`
+  needs the nonce forwarded from `app/[locale]/layout.tsx`, the way next-themes' is.
+  `e2e/security.e2e.ts` fails on any CSP violation — don't loosen the policy to make it pass
+  without reading the reasoning in `DEVELOPMENT.md § 安全`.
 - **Errors have a contract — don't hand-roll one.** Services throw the typed errors in
   `src/core/errors.ts`. A Server Action is an `export async function` whose body is one
   `runAction({...})` call (`src/core/action.ts`) and returns `ActionResult<T>`; a Route Handler

@@ -1,4 +1,5 @@
 import type { Instrumentation } from 'next'
+import { env } from '@/core/env'
 import { loggablePath, logger } from '@/core/logger'
 import { REQUEST_ID_HEADER } from '@/core/request-id'
 
@@ -19,10 +20,27 @@ import { REQUEST_ID_HEADER } from '@/core/request-id'
  *
  * A real deployment swaps `logger.error` here for Sentry/OTel/whatever. The shape
  * of the hook doesn't change.
- *
- * Nothing is exported as `register()`: there's no tracer to initialise. Add one
- * there if you wire up OpenTelemetry.
  */
+
+/**
+ * Runs once per server instance, before the first request is served.
+ *
+ * Used here only for a boot-time configuration check. This is the right place for
+ * it: it runs exactly once, on the server, early enough to be seen in deploy logs
+ * — and unlike a check inside a request path it can't be missed or spammed.
+ *
+ * Initialise a tracer here too if you wire up OpenTelemetry.
+ */
+export function register() {
+	if (env.NODE_ENV === 'production' && !env.AUTH_URL) {
+		// A warning rather than a throw: refusing to boot would turn a hardening
+		// recommendation into an outage for anyone upgrading. See the `trustHost`
+		// note in core/auth/config.ts for what's actually at risk.
+		logger.warn(
+			"AUTH_URL is not set. Auth.js will derive callback URLs from the Host header, which anything in front of the app can set. Set AUTH_URL to this deployment's canonical origin.",
+		)
+	}
+}
 export const onRequestError: Instrumentation.onRequestError = (
 	error,
 	request,

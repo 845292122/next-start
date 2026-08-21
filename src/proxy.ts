@@ -1,7 +1,15 @@
 import type { NextRequest } from 'next/server'
 import createMiddleware from 'next-intl/middleware'
 import { REQUEST_ID_HEADER, resolveRequestId } from '@/core/request-id'
+import { buildContentSecurityPolicy } from '@/core/security-headers'
 import { routing } from '@/i18n/routing'
+
+/**
+ * The header Next reads the nonce from, and the one `app/[locale]/layout.tsx`
+ * forwards to next-themes. The name is Next's convention.
+ */
+const NONCE_HEADER = 'x-nonce'
+const CSP_HEADER = 'Content-Security-Policy'
 
 /**
  * Next 16 renamed the `middleware` file convention to `proxy` — the export name
@@ -37,13 +45,34 @@ export function proxy(request: NextRequest) {
 	// protocol.
 	request.headers.set(REQUEST_ID_HEADER, requestId)
 
+	// A fresh nonce per request — a reused one is no better than 'unsafe-inline'.
+	const nonce = crypto.randomUUID()
+	const csp = buildContentSecurityPolicy({
+		nonce,
+		isDev: process.env.NODE_ENV === 'development',
+	})
+
+	// Both of these go on the *request*, and both are needed for different readers:
+	//
+	// - Next parses the `nonce-...` out of the CSP header on the request and
+	//   attaches that nonce to the framework scripts, page chunks and its own
+	//   inline styles automatically. Set it only on the response and none of that
+	//   happens.
+	// - `x-nonce` is for our own code: `app/[locale]/layout.tsx` reads it and hands
+	//   it to next-themes, whose blocking script Next knows nothing about.
+	request.headers.set(CSP_HEADER, csp)
+	request.headers.set(NONCE_HEADER, nonce)
+
 	// This is what resolves a request to a locale: it reads the [locale] segment,
 	// falls back to the `NEXT_LOCALE` cookie and then `Accept-Language`, and
 	// redirects when the URL doesn't match the resolved locale.
 	const response = handleI18nRouting(request)
 
-	// Also on the way out, so a browser request can be correlated from the client
-	// side (devtools, a bug report, an uptime monitor).
+	// The CSP has to be on the response too — that's the copy the browser enforces.
+	response.headers.set(CSP_HEADER, csp)
+
+	// Request id also on the way out, so a browser request can be correlated from
+	// the client side (devtools, a bug report, an uptime monitor).
 	response.headers.set(REQUEST_ID_HEADER, requestId)
 
 	return response

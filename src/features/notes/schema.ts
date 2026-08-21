@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import '@/core/zod-config'
 
 export const createNoteSchema = z.object({
 	title: z.string().min(1).max(200),
