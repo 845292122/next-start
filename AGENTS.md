@@ -19,6 +19,10 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
   mobile clients, webhooks, or framework-mandated callbacks (`api/auth/[...nextauth]`).
 - **Never write SQL in a page, Route Handler, or Server Action.** All data access goes through
   `src/core/services/`; everything else only calls those functions.
+- **Never log a raw URL, and never put user data in an exception message.** Paths go through
+  `loggablePath()` (`src/core/logger.ts`) because OAuth callbacks carry an exchangeable `code` in
+  the query string; pino's key-based redaction cannot see inside a string. Same reason messages
+  must stay free of PII — `phone` is this app's login identity.
 - **Errors have a contract — don't hand-roll one.** Services throw the typed errors in
   `src/core/errors.ts`. A Server Action is an `export async function` whose body is one
   `runAction({...})` call (`src/core/action.ts`) and returns `ActionResult<T>`; a Route Handler

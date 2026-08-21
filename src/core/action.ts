@@ -4,7 +4,8 @@ import type { z } from 'zod'
 import type { ActionResult } from '@/core/action-result'
 import { getRequiredSession } from '@/core/auth/session'
 import { isClientError, toAppError } from '@/core/errors'
-import { logger } from '@/core/logger'
+import { requestLogger } from '@/core/logger'
+import { currentRequestId } from '@/core/request-id'
 import { parseOrThrow } from '@/core/validation'
 
 /**
@@ -88,12 +89,15 @@ async function execute<TData>(
 		unstable_rethrow(error)
 
 		const appError = toAppError(error)
+		// Tags the line with the id the proxy injected, so this failure and the
+		// `onRequestError` entry for the same request can be pulled out together.
+		const log = requestLogger(await currentRequestId())
 
 		if (isClientError(appError.code)) {
 			// Expected, caller-caused failure: no stack, and warn rather than error.
 			// Logging validation failures at error level is how an error log stops
 			// being worth reading.
-			logger.warn(
+			log.warn(
 				{ action: name, code: appError.code, fields: appError.fields },
 				appError.message,
 			)
@@ -102,7 +106,7 @@ async function execute<TData>(
 			// original throw (attached as `cause` by toAppError) lands in the log —
 			// which is the only place it lands. The client gets the code and nothing
 			// else.
-			logger.error({ action: name, err: appError }, 'action failed')
+			log.error({ action: name, err: appError }, 'action failed')
 		}
 
 		return { ok: false, code: appError.code, fields: appError.fields }

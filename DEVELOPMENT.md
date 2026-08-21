@@ -12,6 +12,7 @@
 - [分层与依赖方向](#分层与依赖方向)
 - [数据层](#数据层)
 - [错误处理](#错误处理)
+- [可观测性](#可观测性)
 - [UI 与主题](#ui-与主题)
   - [什么该写进 globals.css](#什么该写进-globalscss)
 - [认证](#认证)
@@ -74,6 +75,7 @@ src/app/
 │   └── [...rest]/      # 未匹配 URL 的兜底，只调 notFound()
 ├── api/                # Route Handlers —— 注意在 [locale] 之外
 │   ├── auth/[...nextauth]/
+│   ├── health/         # 健康检查（不鉴权），见[可观测性](#可观测性)
 │   └── notes/          # 外部消费者路径的示例，应用自己不调
 ├── global-error.tsx    # 根布局自己炸掉时的最后兜底，零 import
 ├── favicon.ico
@@ -147,7 +149,8 @@ src/features/auth/
 ```
 src/core/
 ├── env.ts              # 全项目唯一读 process.env 的地方，Zod 校验
-├── logger.ts           # pino 实例
+├── logger.ts           # pino 实例 + 脱敏 + loggablePath()
+├── request-id.ts       # x-request-id 的来源与读取，见[可观测性](#可观测性)
 ├── errors.ts           # 错误词表：AppError 及子类，每个带一个 code
 ├── action-result.ts    # ActionResult 类型。types-only，客户端可以 import
 ├── action.ts           # runAction / runPublicAction —— Server Action 的运行器
@@ -174,7 +177,9 @@ src/core/
 
 - `src/core/db/client.ts` 把 drizzle 实例挂在 `globalThis` 上：Next 每次 dev HMR 和每个并行
   build worker 都会重新求值这个模块，不缓存就会每次新开一个数据库文件句柄。
-- `src/core/logger.ts` 的 pino transport 会起 worker 线程，**不要在 edge runtime 的文件里 import 它**。
+- `src/core/logger.ts` 的 pino transport 会起 worker 线程，**不要在 `src/proxy.ts` 或 edge
+  runtime 的文件里 import 它**。（Next 16 起 proxy 默认跑 Node runtime，所以它可能真的能跑，
+  但 proxy 有可能被部署到 CDN，文档明确要求别依赖共享模块，所以 proxy 里一行日志都不打。）
 - **`src/core/env.ts` 在模块作用域就把 `process.env` 快照成校验后的 `env` 对象**，消费方读的是
   这个冻结的对象（`db/client.ts` 打开的是 `env.DATABASE_URL`，不是 `process.env.DATABASE_URL`）。
   所以进程里**第一个** import 到 `@/core/env` 的模块（间接地：任何 import `core/logger.ts` 的
@@ -194,7 +199,8 @@ src/core/
 | `drizzle/` | `drizzle-kit generate` 生成的迁移 SQL 和 `meta/` 快照。**进版本库，不手改** |
 | `drizzle.config.ts` | drizzle-kit 的配置：dialect、schema 路径、输出目录、连接串 |
 | `src/i18n/` | next-intl 的配置与文案，见[国际化](#国际化) |
-| `src/proxy.ts` | Next 16 的中间件（旧名 `middleware.ts`）。**只做 locale 解析与重定向，不管登录态** |
+| `src/proxy.ts` | Next 16 的中间件（旧名 `middleware.ts`）。**只做 locale 解析 + 注入 `x-request-id`，不管登录态**。Next 16 起默认跑 Node runtime |
+| `src/instrumentation.ts` | `onRequestError`：接住渲染期异常，把 digest 和真实堆栈写在一起，见[可观测性](#可观测性) |
 | `src/lib/` | 不属于某个业务域的通用工具：目前只有 `action-error.ts`（把 `ActionResult` 的 `code` 翻成文案，见[错误处理](#错误处理)） |
 | `src/types/messages.d.ts` | 把 `zh.json` 的形状喂给 next-intl 的 `AppConfig`，让 `t('key')` 受类型检查 |
 | `e2e/` | Playwright 用例，文件名必须是 `*.e2e.ts`；`auth.setup.ts` 是登录态的来源 |
@@ -516,6 +522,91 @@ if (!result.ok) {
 **这是无害的**——它说的是客户端主动断开了，不是渲染失败。加 `loading.tsx` 之前
 （`bun run test:e2e` 跑 30 个用例）一次都不出现，之后偶发出现一到两次，取决于时序。
 知道它是什么就行，别去追。
+
+## 可观测性
+
+三件事：日志能不能关联、错误能不能查、探针能不能探。
+
+### 请求 id 从哪来，为什么不是 AsyncLocalStorage
+
+一条 `x-request-id` 贯穿一次请求。没有它，一个 Server Action 的失败日志和同一次请求的
+`onRequestError` 日志根本连不起来，用户报"它坏了"也没有东西可 grep。
+
+来源有三个，按优先级（见 [src/core/request-id.ts](src/core/request-id.ts)）：
+
+1. **外部传入的 `x-request-id`**——前面的负载均衡 / CDN / 反代通常会带一个，沿用它我们的
+   日志才能和它们的接上。所以是先读后生成。
+2. **`src/proxy.ts`**，页面请求走这条：外部没带就生成一个，并**向上游转发**给渲染层。
+3. **`core/http.ts` 的 `withHandler`**，Route Handler 走这条。它必须自己生成，因为
+   **proxy 的 matcher 排除了 `/api`**——Route Handler 永远看不到 proxy 注入的 id。
+
+**为什么不用 AsyncLocalStorage：** Next 的 proxy 文档写得很直接——proxy "可以跑在应用主
+运行时之外"、可能被部署到 CDN，所以"不要指望依赖共享模块或全局变量"，跨 proxy→应用只能走
+header / cookie / URL。ALS 在这里根本不成立。应用内部理论上可以用 ALS，但没有一个能安装
+per-request 包装器的位置，而实际会打日志的地方只有 `runAction` / `withHandler` /
+`instrumentation.ts` 三处，显式传递更简单。
+
+页面侧读 id 用 `currentRequestId()`（内部是 `headers()`）。它在没有请求上下文时返回
+`undefined` 而不是抛错——这样 `runAction` 在单测里也能用；但注意里面有 `unstable_rethrow`：
+`headers()` 也会抛 Next 自己的"你在静态渲染里用了动态 API"信号，把**那个**吞掉会让一个
+构建期诊断变成静默渲染错的页面。
+
+> proxy 里的写法有个关键点：**在调 next-intl 之前改 `request.headers`**。next-intl 内部用
+> `new Headers(request.headers)` 建转发头再交给 `NextResponse.next({ request: { headers } })`
+> （见 `node_modules/next-intl/dist/esm/development/middleware/middleware.js`），所以那时候
+> 设的东西会被带下去。反过来先让 next-intl 出响应、再往响应上加**请求**头是做不到的，除非
+> 动 Next 内部的 `x-middleware-override-headers` 协议。这条链路有 e2e 守着
+> （`e2e/observability.e2e.ts`）。
+
+### 日志脱敏，以及它保证不了什么
+
+`core/logger.ts` 配了 pino 的 `redact`。`phone` 排第一位有原因：它是本项目的**登录身份**
+（`core/auth/otp.ts`），是最容易到处乱跑的那条 PII。每个 key 都列两遍（裸的和 `*.` 一层），
+因为 fast-redact 匹配的是字面路径而 `*` 只覆盖一层，而调用点写出来的正是一层嵌套。
+
+**两条它管不到的，都用测试钉住了（`core/logger.test.ts`）：**
+
+- **字符串里的敏感数据。** 把手机号插进异常 message（`Error: no user for 138...`）之后，
+  它就是一串字符而不是带 key 的值，脱敏看不见。**由此得出的规矩：别把用户数据写进异常消息。**
+- **URL 里的凭据。** 所以日志里的路径一律过
+  [`loggablePath()`](src/core/logger.ts)，而不是直接记 `request.url` / `request.path`。这不是
+  假想风险：OAuth 会回调到 `/api/auth/callback/...?code=...&state=...`，那个 `code` 能换出一个
+  会话，而 `onRequestError` 看得到**每一条**路由。它只替换危险的参数值，保留其余 query——
+  query 往往是"到底哪个请求炸了"的唯一线索。
+
+邮件收件人是掩码而不是脱敏（`core/mailer/send.ts` 的 `maskEmail()`）：那条日志是用来解释
+"为什么没发信"的，域名是真正有诊断价值的部分，本地部分不落盘。`[redacted]` 在这里严格更差。
+
+### `instrumentation.ts`：digest 到堆栈的唯一桥
+
+[src/instrumentation.ts](src/instrumentation.ts) 导出 `onRequestError`，接住两个包装器管不到
+的东西——**首先是 Server Component 渲染期间抛的异常**，那是应用代码没有位置去拦的。
+
+它也是生产环境下错误的两半唯一相遇的地方。Next 把送到浏览器的消息换成了 hash，所以错误页
+只能显示那个 `digest`（见[错误处理](#错误处理)）。**没有一个钩子把 digest 和真实堆栈写在
+一起，用户报上来的 digest 就是死路。** 这个文件的意义就在这。
+
+两个细节：
+
+- `error` 的类型是 `unknown`，因为 Server Components 渲染时 React 可能换掉原始异常对象。
+  `digest` 才是可靠的标识，所以是防御性读取而不是强转。
+- **id 缺失时不兜底生成。** 缺失意味着 proxy 没跑，编一个只出现在这一行的值只会看起来像
+  关联，实际不是。
+- 真上生产就把这里的 `logger.error` 换成 Sentry / OTel，钩子形状不用变。没有导出
+  `register()`，因为暂时没有 tracer 要初始化。
+
+### `/api/health`
+
+[src/app/api/health/route.ts](src/app/api/health/route.ts)。容器编排、负载均衡、拨测都要它。
+也是本模板最小的**外部消费者** Route Handler 示例。
+
+- **真跑一条 `select 1`**，不只是"进程活着"——这是 readiness 和 liveness 的区别。数据库死了
+  却报健康，比没有探针更糟。
+- **`export const dynamic = 'force-dynamic'`。** 没有它，一个没有请求期输入的路由可能被缓存
+  应答，那就等于探了个假。
+- **故意不鉴权**，所以返回体形状是固定的：只有 `status`，没有版本、没有路径、没有失败原因。
+  失败原因进日志。`e2e/observability.e2e.ts` 有一条用例专门断言"不需要 session"——将来改
+  鉴权时它会挡住"健康检查悄悄变成 401"，那在负载均衡看来就是把实例踢出轮转。
 
 ## UI 与主题
 
@@ -936,6 +1027,8 @@ stat -f %m data/dev.db && bun run test:unit && stat -f %m data/dev.db   # 两个
 - **接口的错误契约在 `e2e/api-errors.e2e.ts` 里断言**，用 Playwright 的 `request` fixture 直接
   打接口。`core/http.test.ts` 只能证明 `withHandler` 本身对，证明不了
   `app/api/notes/` 真的接上了它——那里面每一个状态码在包装器出现之前都是 500
+- **`e2e/observability.e2e.ts` 守请求 id 链路和健康检查。** 这两样没法单测：整件事的前提是
+  `src/proxy.ts` 真的在跑，而 proxy 只存在于一个运行中的 Next 服务里
 - 浏览器语言在 `playwright.config.ts` 里锁成了 `zh-CN`，所以不带前缀的 URL 断言拿到的是中文；
   要测英文就显式访问 `/en/...`
 
@@ -1093,7 +1186,12 @@ CI（`.github/workflows/ci.yml`）四个并行 job：`lint` / `typecheck` / `tes
 2. **没有任何限流。** `authorize()` 可以被无限次调用来爆破验证码；换成真 OTP 之后，发码接口
    被刷等于直接的短信账单。`core/errors.ts` 已经预留了 `RateLimitedError` / `RATE_LIMITED`
    （429），但还没有任何地方抛它，也还没有限流器。
-3. **错误边界没有常驻的自动化测试。** 渲染出来的部分由
+3. **没有安全响应头。** `next.config.ts` 里没有 `headers()`：没有 CSP、HSTS、
+   `X-Content-Type-Options`、`Referrer-Policy`、`frame-ancestors`。CSP 要用 nonce 的话在
+   `src/proxy.ts` 里生成——那个文件已经是组合式的（见[可观测性](#可观测性)），加一段进去就行。
+4. **`onRequestError` 只写日志，没有接错误上报服务。** 形状是对的，但生产环境应该换成
+   Sentry / OTel，见[可观测性](#可观测性)。也没有 `register()`，没有 tracing。
+5. **错误边界没有常驻的自动化测试。** 渲染出来的部分由
    [ErrorState.test.tsx](src/components/ui/ErrorState.test.tsx) 覆盖，但"边界有没有真的接上"
    要靠一条故意抛错的路由，模板里不想常留这种东西。改完 `error.tsx` 之后照下面这样验一次
    （两个 `error.tsx` 都是这么验过的）：
@@ -1102,7 +1200,7 @@ CI（`.github/workflows/ci.yml`）四个并行 job：`lint` / `typecheck` / `tes
    # 1. 目录名不能以下划线开头——那是 Next 的 private folder 约定，整个目录不进路由
    mkdir -p 'src/app/[locale]/boomprobe' 'src/app/[locale]/(app)/boomprobeapp'
    for d in 'src/app/[locale]/boomprobe' 'src/app/[locale]/(app)/boomprobeapp'; do
-     echo 'export default async function Boom() { throw new Error("probe") }' > "$d/page.tsx"
+   echo 'export default async function Boom() { throw new Error("probe") }' > "$d/page.tsx"
    done
    # 2. 用 /en/ 前缀访问。顶层就是 [locale] 动态段，所以 /boomprobe 会被当成
    #    locale="boomprobe"，被 layout 的 hasLocale() 判成 404；localePrefix 是
@@ -1117,31 +1215,31 @@ CI（`.github/workflows/ci.yml`）四个并行 job：`lint` / `typecheck` / `tes
 
    `global-error.tsx` 要触发得让 `[locale]/layout.tsx` 自己抛错，代价比较大，一般改完它
    肉眼过一遍就行。
-4. **`src/core/storage/local-stub.ts` 只是占位**，写本地磁盘。真要用文件存储就照 `StorageAdapter`
+6. **`src/core/storage/local-stub.ts` 只是占位**，写本地磁盘。真要用文件存储就照 `StorageAdapter`
    接口换成 S3/R2 实现。
-5. **403 页没有任何地方会跳转过去。** 登录拦截解决的是"未登录"（弹到 `/login`），而项目里还没有
+7. **403 页没有任何地方会跳转过去。** 登录拦截解决的是"未登录"（弹到 `/login`），而项目里还没有
    角色模型，所以没有"已登录但无权限"这种情况。加了角色判断之后，service 抛 `ForbiddenError`
    （`core/errors.ts` 里已经有了），让页面 `redirect('/403')`。
    > 另一条路是 Next 的 `forbidden()` / `unauthorized()` 加 `forbidden.tsx` /
    > `unauthorized.tsx`，能顺手填掉这个缺口。**本项目刻意没走这条**：它需要打开
    > `experimental.authInterrupts`，模板不想依赖实验性 API；而且它靠抛中断工作，会被
    > `runAction` / `withHandler` 的 try/catch 影响（要靠 `unstable_rethrow` 放行）。
-6. **`listNotes` 没有分页。** 一个 `select *` 全表返回。`notes` 是[标准流程](#新增业务的标准流程)
+8. **`listNotes` 没有分页。** 一个 `select *` 全表返回。`notes` 是[标准流程](#新增业务的标准流程)
    会被照抄的模板，所以这条会传染到真实业务表上。另外搜索用的
    `like(lower(title), '%q%')` 没有转义用户输入里的 `%` / `_`（搜 `%` 匹配全部），
    而 `lower()` 也让索引失效。
-7. **`notesTable` 只有 `createdAt`，没有 `updatedAt`**，也没有软删除。多数生产表需要前者
+9. **`notesTable` 只有 `createdAt`，没有 `updatedAt`**，也没有软删除。多数生产表需要前者
    （Drizzle 的 `$onUpdate`）。
-8. **一个 `db.transaction()` 示例都没有**，[标准流程](#新增业务的标准流程)里也没提。真实业务
-   （下单、扣库存）少不了它。
-9. **登录页的微信按钮是禁用的占位。** 后端没有对应 provider，接法见
-   `src/core/auth/config.ts` 的 `providers`。
-10. **没有 `authenticator` 表。** `@auth/drizzle-adapter` 的 WebAuthn 方法会去查它，
+10. **一个 `db.transaction()` 示例都没有**，[标准流程](#新增业务的标准流程)里也没提。真实业务
+    （下单、扣库存）少不了它。
+11. **登录页的微信按钮是禁用的占位。** 后端没有对应 provider，接法见
+    `src/core/auth/config.ts` 的 `providers`。
+12. **没有 `authenticator` 表。** `@auth/drizzle-adapter` 的 WebAuthn 方法会去查它，
     表不存在时那些方法运行时会炸。本模板不用 WebAuthn，所以没建；要用的话往
     `src/core/db/schema.ts` 里补一个，并把它传给 `DrizzleAdapter`。
-11. **英文文案是从中文翻译来的占位内容**，dashboard 和登录页左侧插画那些都是展示用的样例文字，
+13. **英文文案是从中文翻译来的占位内容**，dashboard 和登录页左侧插画那些都是展示用的样例文字，
     不是真实业务文案。
-12. **`/dashboard` 和 `/notes` 都是给你删的。** 前者是设计系统活文档，后者是业务示例。
+14. **`/dashboard` 和 `/notes` 都是给你删的。** 前者是设计系统活文档，后者是业务示例。
 
 ### 主动放弃的东西（不是缺口）
 

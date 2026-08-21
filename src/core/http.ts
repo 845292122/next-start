@@ -6,7 +6,8 @@ import {
 	toAppError,
 	ValidationError,
 } from '@/core/errors'
-import { logger } from '@/core/logger'
+import { loggablePath, requestLogger } from '@/core/logger'
+import { REQUEST_ID_HEADER, resolveRequestId } from '@/core/request-id'
 import { parseOrThrow } from '@/core/validation'
 
 /**
@@ -55,8 +56,18 @@ export function withHandler<TContext = unknown>(
 	handler: (request: Request, context: TContext) => Promise<Response>,
 ) {
 	return async (request: Request, context: TContext): Promise<Response> => {
+		// Minted here rather than taken from the proxy: the proxy's matcher excludes
+		// /api, so a Route Handler never sees a proxy-injected id. An incoming one
+		// (from a load balancer) still wins — see core/request-id.ts.
+		const requestId = resolveRequestId(request.headers)
+
 		try {
-			return await handler(request, context)
+			const response = await handler(request, context)
+			// Echoed so an external caller can quote it in a bug report, and so its
+			// own logs join up with ours. Route Handlers are the external-consumer
+			// interface, which is exactly who needs this.
+			response.headers.set(REQUEST_ID_HEADER, requestId)
+			return response
 		} catch (error) {
 			// First statement in the catch — see the same call in core/action.ts.
 			// notFound() and redirect() throw internal Next errors that must pass
@@ -64,20 +75,25 @@ export function withHandler<TContext = unknown>(
 			unstable_rethrow(error)
 
 			const appError = toAppError(error)
+			const log = requestLogger(requestId)
 
 			if (isClientError(appError.code)) {
-				logger.warn(
+				log.warn(
 					{
 						method: request.method,
-						url: request.url,
+						path: loggablePath(request.url),
 						code: appError.code,
 						fields: appError.fields,
 					},
 					appError.message,
 				)
 			} else {
-				logger.error(
-					{ method: request.method, url: request.url, err: appError },
+				log.error(
+					{
+						method: request.method,
+						path: loggablePath(request.url),
+						err: appError,
+					},
 					'route handler failed',
 				)
 			}
@@ -87,7 +103,10 @@ export function withHandler<TContext = unknown>(
 			// so it stays in the log.
 			return Response.json(
 				{ error: appError.code, fields: appError.fields },
-				{ status: STATUS_BY_CODE[appError.code] },
+				{
+					status: STATUS_BY_CODE[appError.code],
+					headers: { [REQUEST_ID_HEADER]: requestId },
+				},
 			)
 		}
 	}
