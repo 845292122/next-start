@@ -35,7 +35,20 @@ function createDb() {
  * libsql understands `:memory:`.
  */
 function toLibsqlUrl(databaseUrl: string) {
-	if (databaseUrl === ':memory:') return ':memory:'
+	// `file::memory:?cache=shared`, not the bare `:memory:` libsql also accepts.
+	//
+	// A plain in-memory database is **private to one connection**, and
+	// @libsql/client opens a second connection for `db.transaction()`. The result is
+	// that any transaction against `:memory:` sees an empty database and leaves the
+	// original connection unusable — verified: a commit-only transaction is enough,
+	// and afterwards every query fails with `no such table`. Since the unit suite
+	// runs on in-memory (test/unit-setup.ts) while production runs on a file, that
+	// divergence would mean transactions could not be tested at all.
+	//
+	// The shared-cache URI is SQLite's answer to exactly this: one in-memory
+	// database, reachable from every connection in the process. Same speed, no
+	// per-connection isolation.
+	if (databaseUrl === ':memory:') return 'file::memory:?cache=shared'
 	if (/^(file|libsql|https?|wss?):/.test(databaseUrl)) return databaseUrl
 	return `file:${databaseUrl}`
 }
