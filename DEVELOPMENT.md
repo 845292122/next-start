@@ -428,6 +428,11 @@ zod 的报错也就永远不出现。用 react-hook-form 管校验时，在 `<Fo
 [patches/next-themes@0.4.6.patch](patches/next-themes@0.4.6.patch)。**这是本仓库唯一的
 依赖 patch**，改动很小，但没有文档没人敢删，所以记在这里。
 
+上游 issue：[pacocoursey/next-themes#397](https://github.com/pacocoursey/next-themes/issues/397)
+（2026-08-18 提，**截至写下这行时仍是 open**）。那个 issue 描述的场景和本项目一模一样：
+next-intl 要求根 layout 落在 `[locale]` 动态段里，切换 locale 的客户端导航会让
+`ThemeProvider` 子树在客户端 remount，React 19.2 于是报错。
+
 patch 做的事（`dist/index.js` 和 `dist/index.mjs` 各改一处，改的是压缩产物）：给内部那个
 memo 化的 `ThemeScript` 组件加一个模块级标志 `themeScriptHasMounted`，在它的 `useEffect`
 里置为 `true`；此后的每次渲染返回 `null` 而不是 `<script>` 元素。
@@ -448,10 +453,11 @@ memo 化的 `ThemeScript` 组件加一个模块级标志 `themeScriptHasMounted`
 同一个机制也是 [`locale-switch.tsx`](src/components/ui/locale-switch.tsx) 里注释的那件事，
 不过语言切换用整页刷新绕开了它，见[语言切换为什么是整页刷新](#语言切换为什么是整页刷新)。
 
-**什么时候可以删掉这个 patch：** 升级 next-themes 之后，把 `patchedDependencies` 那一条和
-`patches/` 目录删掉，`bun install`，然后 `bun run dev` 登录一次（`router.refresh()` 那条
-路径），看控制台还有没有 `Encountered a script tag` 这条警告。没有就说明上游修了，patch 可以
-永久移除。
+**什么时候可以删掉这个 patch：** 先看
+[#397](https://github.com/pacocoursey/next-themes/issues/397) 是否已关闭并发版。升级
+next-themes 之后，把 `patchedDependencies` 那一条和 `patches/` 目录删掉，`bun install`，
+然后 `bun run dev` 登录一次（`router.refresh()` 那条路径），看控制台还有没有
+`Encountered a script tag` 这条警告。没有就说明上游修了，patch 可以永久移除。
 
 > patch 改的是压缩后的 `dist/`，所以 **next-themes 一升级 patch 必然失效**（`bun install`
 > 会直接报 patch 应用失败）。这是好事——它强制你在升级时重新走一遍上面那个验证步骤，而不是
@@ -802,11 +808,20 @@ key 加到 `src/features/tasks/swr-keys.ts`。
 
 | 变量 | 必填 | 默认 | 用途 |
 | --- | --- | --- | --- |
-| `NODE_ENV` | 否 | `development` | 决定 pino 是否启用 pretty 输出 |
 | `DATABASE_URL` | 否 | `./data/dev.db` | SQLite **文件路径**（不是 URL）。`:memory:` 也认 |
 | `AUTH_SECRET` | **是** | — | Auth.js 签 JWT，缺了直接启动失败 |
 | `LOG_LEVEL` | 否 | `info` | pino 级别 |
 | `RESEND_API_KEY` | 否 | — | 不填时 `sendEmail()` 只打 warn 不发信 |
+| `EMAIL_FROM` | 否 | `onboarding@resend.dev` | 发件地址。默认是 Resend 的共享测试发件人，**只能发给 API key 所属的那个邮箱**，上线前换成自有已验证域名的地址 |
+
+`NODE_ENV` 在 `src/core/env.ts` 的 schema 里（决定 pino 是否启用 pretty 输出），但**不在
+`.env.example` 里**：这个变量该由框架和运行环境决定（`next dev` 给 `development`、
+`next build` / `next start` 给 `production`），手写进 `.env.local` 只会带来把
+`NODE_ENV=development` 一路 copy 到生产的风险。
+
+运行时版本：包管理和脚本用 Bun（`packageManager` 已 pin 到 `bun@1.3.3`），但 `next start`
+跑在 **Node** 上，所以 `engines` 和 `.nvmrc` 另外声明了 Node 版本（Next 16 要求
+`>=20.9.0`）。
 
 CI（`.github/workflows/ci.yml`）四个并行 job：`lint` / `typecheck` / `test` / `e2e`。
 **没有数据库 service**——单测跑在 `:memory:`，e2e 自己建文件库。

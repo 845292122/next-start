@@ -16,6 +16,11 @@ export const env = createEnv({
 			.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace'])
 			.default('info'),
 		RESEND_API_KEY: z.string().min(1).optional(),
+		// Resend's shared test sender, which only delivers to the address that owns
+		// the API key. Defaulted rather than required so a fresh clone boots with
+		// no mail configuration at all — but it has to be replaced with an address
+		// on a verified domain before any real mail goes out.
+		EMAIL_FROM: z.string().min(1).default('onboarding@resend.dev'),
 	},
 	client: {},
 	runtimeEnv: {
@@ -24,6 +29,7 @@ export const env = createEnv({
 		AUTH_SECRET: process.env.AUTH_SECRET,
 		LOG_LEVEL: process.env.LOG_LEVEL,
 		RESEND_API_KEY: process.env.RESEND_API_KEY,
+		EMAIL_FROM: process.env.EMAIL_FROM,
 	},
 	// A bare `RESEND_API_KEY=` in .env.local reaches this as "", which is
 	// *present* — so an `.optional()` schema rejects it for being too short

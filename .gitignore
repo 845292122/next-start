@@ -40,6 +40,11 @@ yarn-error.log*
 # local storage stub
 /.local-storage
 
+# Claude Code's per-machine settings (the shared .claude/settings.json, if one is
+# ever added, stays tracked). Also keeps Biome out of it — biome.json has
+# vcs.useIgnoreFile, so anything listed here is excluded from `bun run lint`.
+/.claude/settings.local.json
+
 # vercel
 .vercel
 

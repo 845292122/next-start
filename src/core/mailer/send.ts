@@ -1,4 +1,5 @@
 import type { ReactElement } from 'react'
+import { env } from '@/core/env'
 import { logger } from '@/core/logger'
 import { resend } from '@/core/mailer/client'
 
@@ -16,7 +17,7 @@ export async function sendEmail(options: {
 	}
 
 	await resend.emails.send({
-		from: 'onboarding@resend.dev',
+		from: env.EMAIL_FROM,
 		to: options.to,
 		subject: options.subject,
 		react: options.react,
