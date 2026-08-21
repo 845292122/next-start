@@ -92,6 +92,9 @@ src/app/
 - **`not-found.tsx` 故意不套 `AppShell`。** 套了就要有 session，而 404 对未登录访客也得能渲染。
 - Route Handler 里**每个 handler 自己校验会话**——`(app)/layout.tsx` 的守卫管不到它们，
   见[认证](#认证)。
+- **Route Handler 默认只写给 Next.js 应用之外的消费者**（第三方调用方、移动端、webhook、或框架
+  强制要求的回调如 `api/auth/[...nextauth]`）。应用内部的数据交互——表单、增删改、甚至客户端的
+  搜索/乐观更新——优先用 Server Action，见[分层与依赖方向](#分层与依赖方向)的暴露方式优先级。
 
 ### `src/components/` — 跨业务复用的展示层
 
@@ -125,8 +128,10 @@ src/features/auth/
 └── components/LoginForm.tsx   # 登录表单（+ 同目录的组件测试）
 ```
 
-`notes` 是模板自带的**完整**示例：从建表一路到界面，两条暴露路径都用上了。不需要就整个删掉，
-删除清单见 [README](README.md#拿它开新项目)。
+`notes` 是模板自带的**完整**示例：从建表一路到界面，两条暴露路径都用上了（`NoteList` 的
+SWR + Route Handler 那条现在算历史示例，只是用来展示这条路径长什么样——新业务默认只要
+Server Action，见下面暴露方式优先级）。不需要就整个删掉，删除清单见
+[README](README.md#拿它开新项目)。
 
 ### `src/core/` — 服务端能力，唯一允许碰 IO 的地方
 
@@ -195,7 +200,8 @@ src/app/ (路由、页面)
 
 硬规则：
 
-1. **页面和 Route Handler 里不写 SQL。** 所有数据访问收在 `src/core/services/`，页面只调函数。
+1. **页面、Route Handler、Server Action 里都不写 SQL。** 所有数据访问收在
+   `src/core/services/`，三者都只调函数，不直接碰 db client。
 2. **`src/components/` 不许 import `src/core/`。** 它一旦需要业务数据，就该搬到 `src/features/`。
 3. **只有 `src/core/env.ts` 读 `process.env`。** 别的地方要用配置就 `import { env }`。
 4. **越权防线在 service 层。** service 的第一个参数一律是 `userId`，所有 `where` 都带上它，
@@ -203,13 +209,19 @@ src/app/ (路由、页面)
    handler 忘了校验，也拿不到别人的数据。`notes-service.test.ts` 里有一条用例专门守这件事。
 5. **`core/` 不许 import `features/`。** 所以登录表单和 Credentials provider 共用的
    `phoneOtpSchema` 放在 `src/core/auth/schema.ts`，不在 `features/auth/` 里。
+6. **暴露方式有优先级，不是按场景随便选一条：**
+   - **默认用 Server Action。** 表单提交、增删改，以及绝大部分客户端交互（搜索、勾选、乐观更新……）
+     都走 `src/features/<域>/actions.ts`。Server Action 不是只能配 `<form action>`——Client
+     Component 里也能直接 `await someAction(...)`（配 `useTransition` 拿 pending 状态），甚至可以
+     直接当 SWR 的 fetcher 用。需要输入即搜、乐观更新，不代表就必须写 Route Handler。
+   - **Route Handler 只留给 Next.js 应用之外的消费者**：第三方调用方、移动端、webhook 接收端，
+     或框架强制要求的回调（如 `api/auth/[...nextauth]`）。"页面里想在客户端调一下"不算理由。
+   - `notes` 域的 `NoteList` 走 `/api/notes` 做搜索和乐观更新，是模板早期留下的示例，展示的是
+     "SWR + Route Handler" 这条路径长什么样，**不是新业务该照抄的默认写法**。
 
-两条数据流，按场景选（`notes` 域两条都示范了）：
-
-- **Server Component / Server Action 直接调 service** —— 首屏数据、表单提交走这条。写完
-  `revalidatePath()` 刷新。
-- **客户端 SWR + `/api/*`** —— 需要输入即搜、轮询、乐观更新时走这条。key 统一放
-  `src/features/<域>/swr-keys.ts`，别在组件里拼字符串。
+不管走哪条，只要数据跨了服务端/客户端边界（Server Action 的返回值，或 Route Handler 的
+`Response.json()`），都要过一遍 DTO，见 [DTO 为什么必需](#dto-为什么必需)；如果用了
+Route Handler，SWR 的 key 统一放 `src/features/<域>/swr-keys.ts`，别在组件里拼字符串。
 
 ### DTO 为什么必需
 
@@ -409,6 +421,41 @@ zod 的报错也就永远不出现。用 react-hook-form 管校验时，在 `<Fo
 - **`<html>` 上的 `suppressHydrationWarning` 不能删。** 那个脚本在 React hydrate 之前就
   改了 class，服务端标记和 DOM 本来就不一致。
 - 三态（跟随系统 / 浅色 / 深色）走 `useColorMode()`，`/settings` 页是用法示例。
+
+#### next-themes 打了一个 patch
+
+`package.json` 的 `patchedDependencies` 里给 `next-themes@0.4.6` 打了
+[patches/next-themes@0.4.6.patch](patches/next-themes@0.4.6.patch)。**这是本仓库唯一的
+依赖 patch**，改动很小，但没有文档没人敢删，所以记在这里。
+
+patch 做的事（`dist/index.js` 和 `dist/index.mjs` 各改一处，改的是压缩产物）：给内部那个
+memo 化的 `ThemeScript` 组件加一个模块级标志 `themeScriptHasMounted`，在它的 `useEffect`
+里置为 `true`；此后的每次渲染返回 `null` 而不是 `<script>` 元素。
+
+- 服务端渲染时 `useEffect` 不执行，标志恒为 `false`，所以 SSR 输出里**照样有**那段阻塞脚本
+  ——首屏不闪的效果不受影响。
+- 客户端首次渲染（hydration）时标志还是 `false`，渲染出的 `<script>` 和 SSR 标记一致，
+  hydration 不会 mismatch。
+- 之后标志变成 `true`，任何**客户端重新渲染**都不再产出 script 元素。
+
+为什么需要它：`app/[locale]/layout.tsx` 是根 layout，`<head>` 在它手里。任何在客户端重新
+渲染到根 layout 的操作（比如 `LoginForm` 登录成功后的 `router.refresh()`）都会让 React
+重新渲染 `ThemeScript`。**React 不会执行自己在客户端创建的 `<script>`**，只会在控制台打一条
+`Encountered a script tag while rendering React component`。这条警告是 dev-only，且脚本此时
+不执行也无害（主题已经由 `ThemeProvider` 的 effect 接管了），但它会稳定地污染开发时的控制台，
+而且信息是误导性的——看到的人会以为主题脚本坏了。
+
+同一个机制也是 [`locale-switch.tsx`](src/components/ui/locale-switch.tsx) 里注释的那件事，
+不过语言切换用整页刷新绕开了它，见[语言切换为什么是整页刷新](#语言切换为什么是整页刷新)。
+
+**什么时候可以删掉这个 patch：** 升级 next-themes 之后，把 `patchedDependencies` 那一条和
+`patches/` 目录删掉，`bun install`，然后 `bun run dev` 登录一次（`router.refresh()` 那条
+路径），看控制台还有没有 `Encountered a script tag` 这条警告。没有就说明上游修了，patch 可以
+永久移除。
+
+> patch 改的是压缩后的 `dist/`，所以 **next-themes 一升级 patch 必然失效**（`bun install`
+> 会直接报 patch 应用失败）。这是好事——它强制你在升级时重新走一遍上面那个验证步骤，而不是
+> 让一个陈旧的 patch 静默留在树里。
 
 ## 认证
 
@@ -683,12 +730,17 @@ input / output 两个类型都导出（见 [TypeScript](#typescript)）。
 
 ### 5. 选一条暴露方式
 
-| 场景 | 做法 |
-| --- | --- |
-| 表单提交、增删改 | `src/features/tasks/actions.ts` 写 Server Action：`getRequiredSession()` → `schema.parse()` → 调 service → `revalidatePath()` |
-| 客户端搜索/轮询/乐观更新 | `src/app/api/tasks/route.ts` 写 Route Handler：每个 handler 先 `auth()` 判 401 → parse → 调 service；key 加到 `src/features/tasks/swr-keys.ts` |
+默认只要 Server Action：`src/features/tasks/actions.ts` 写 Server Action——
+`getRequiredSession()` → `schema.parse()` → 调 service → `revalidatePath()`（或者直接把结果
+`return` 给调用方，用来更新本地状态 / SWR 缓存，不用等重新拉取）。表单提交、增删改、客户端搜索、
+乐观更新——只要消费者是这个 Next.js 应用自己，都走这条。
 
-两者不冲突，同一个域可以都有（`notes` 就是）。要过网络就加一个 `dto.ts`，见
+只有真的要给应用之外的消费者用（第三方调用方、移动端、webhook 接收端）才另外写 Route Handler：
+`src/app/api/tasks/route.ts`，每个 handler 先 `auth()`（或其它鉴权）判 401 → parse → 调 service；
+key 加到 `src/features/tasks/swr-keys.ts`。
+
+两者可以同时存在，但不要仅仅因为"要在客户端触发"就选第二条——那种场景第一条也能做到，见
+[分层与依赖方向](#分层与依赖方向)的暴露方式优先级。要过网络就加一个 `dto.ts`，见
 [DTO 为什么必需](#dto-为什么必需)。
 
 > `revalidatePath()` 要传**路由模式**而不是具体 URL：页面在 `[locale]` 下，所以是
