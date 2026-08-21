@@ -11,6 +11,7 @@
 - [目录结构](#目录结构)
 - [分层与依赖方向](#分层与依赖方向)
 - [数据层](#数据层)
+- [错误处理](#错误处理)
 - [UI 与主题](#ui-与主题)
   - [什么该写进 globals.css](#什么该写进-globalscss)
 - [认证](#认证)
@@ -139,6 +140,11 @@ Server Action，见下面暴露方式优先级）。不需要就整个删掉，�
 src/core/
 ├── env.ts              # 全项目唯一读 process.env 的地方，Zod 校验
 ├── logger.ts           # pino 实例
+├── errors.ts           # 错误词表：AppError 及子类，每个带一个 code
+├── action-result.ts    # ActionResult 类型。types-only，客户端可以 import
+├── action.ts           # runAction / runPublicAction —— Server Action 的运行器
+├── http.ts             # withHandler / readJson / readParams —— Route Handler 的运行器
+├── validation.ts       # parseOrThrow：safeParse → ValidationError
 ├── db/
 │   ├── schema.ts       # 建表（就是它，没有 .prisma 文件）
 │   ├── client.ts       # drizzle 实例单例（globalThis 缓存）
@@ -149,7 +155,7 @@ src/core/
 │   ├── config.ts       # Auth.js 配置：adapter、providers、callbacks
 │   ├── index.ts        # 导出 handlers / auth / signIn / signOut
 │   ├── schema.ts       # phoneOtpSchema + 固定演示码常量，config 和登录表单共用
-│   ├── session.ts      # getRequiredSession()，没登录直接抛
+│   ├── session.ts      # getRequiredSession()，没登录抛 UnauthorizedError
 │   └── otp.ts          # 手机验证码的 stub，见"认证"一节
 ├── services/           # 业务逻辑 + 对应的 .test.ts
 ├── mailer/             # Resend 封装 + templates/*.tsx
@@ -161,6 +167,11 @@ src/core/
 - `src/core/db/client.ts` 把 drizzle 实例挂在 `globalThis` 上：Next 每次 dev HMR 和每个并行
   build worker 都会重新求值这个模块，不缓存就会每次新开一个数据库文件句柄。
 - `src/core/logger.ts` 的 pino transport 会起 worker 线程，**不要在 edge runtime 的文件里 import 它**。
+- **`src/core/env.ts` 在模块作用域就把 `process.env` 快照成校验后的 `env` 对象**，消费方读的是
+  这个冻结的对象（`db/client.ts` 打开的是 `env.DATABASE_URL`，不是 `process.env.DATABASE_URL`）。
+  所以进程里**第一个** import 到 `@/core/env` 的模块（间接地：任何 import `core/logger.ts` 的
+  东西，也就是 `core/` 里的大多数文件）就决定了此后所有代码看到的 `DATABASE_URL`。单测靠
+  `test/unit-setup.ts` 的 `--preload` 处理这件事，见[测试](#测试)。
 - `src/core/env.ts` 打开了 `emptyStringAsUndefined`：`.env.example` 里的可选变量都写成
   `RESEND_API_KEY=`，那到了 `process.env` 是空字符串而不是 undefined，
   `z.string().min(1).optional()` 会判它"太短"而不是"没填"。**关掉这个开关，照 `.env.example`
@@ -180,6 +191,7 @@ src/core/
 | `src/types/messages.d.ts` | 把 `zh.json` 的形状喂给 next-intl 的 `AppConfig`，让 `t('key')` 受类型检查 |
 | `e2e/` | Playwright 用例，文件名必须是 `*.e2e.ts`；`auth.setup.ts` 是登录态的来源 |
 | `test/setup.ts` | happy-dom + jest-dom 注册。**只由 `test:dom` 脚本 `--preload`**，见[测试](#测试) |
+| `test/unit-setup.ts` | 把 `DATABASE_URL` 顶成 `:memory:`。**只由 `test:unit` 脚本 `--preload`**，见[测试](#测试) |
 | `biome.json` | 格式化 + lint + import 排序规则 |
 | `playwright.config.ts` | E2E 配置：setup project + `webServer` 跑 db:reset → build → start |
 | `postcss.config.mjs` | 只有 `@tailwindcss/postcss` 一个插件 |
@@ -292,6 +304,142 @@ import type { Note } from '@/core/db/schema'   // = typeof notesTable.$inferSele
 
 不要手写行类型，也**没有需要 `bun install` 才能 typecheck 的生成物**——克隆下来直接
 `bun run typecheck` 就行。
+
+## 错误处理
+
+一句话：**service 抛类型化的错误，暴露层把它翻译成契约。** 业务代码里不写
+`try/catch`，也不写 `if (!session) return 401`。
+
+### 错误词表
+
+[src/core/errors.ts](src/core/errors.ts) 定义了全部错误类型。每个都带一个 `code`，
+这个 code 是整套机制的枢轴：
+
+| 类 | `code` | HTTP | 语义 |
+| --- | --- | --- | --- |
+| `ValidationError` | `VALIDATION` | 400 | 入参不符合 schema |
+| `UnauthorizedError` | `UNAUTHORIZED` | 401 | 没有有效会话 |
+| `ForbiddenError` | `FORBIDDEN` | 403 | 登录了但没权限 |
+| `NotFoundError` | `NOT_FOUND` | 404 | 不存在，**或不属于当前用户** |
+| `ConflictError` | `CONFLICT` | 409 | 唯一约束之类的冲突 |
+| `RateLimitedError` | `RATE_LIMITED` | 429 | 触发限流（还没有地方抛，留给限流器） |
+| —— 其它任何 throw —— | `INTERNAL` | 500 | bug |
+
+两条规则值得单独记：
+
+- **`NOT_FOUND` 同时覆盖"不存在"和"是别人的"。** service 的每个 `where` 都带 `userId`
+  （见[分层与依赖方向](#分层与依赖方向)第 4 条），所以两种情况天然落到同一个分支。
+  刻意不区分——区分了就等于告诉调用方哪些 id 是真实存在的。
+- **`INTERNAL` 只暴露 code，别的什么都不给。** 原始异常挂在 `cause` 上，只进日志。
+  `core/http.test.ts` 里有一条用例专门断言 `SQLITE_BUSY` 和文件路径不会出现在响应体里。
+
+`fields` 字段带的是**出错的字段名，不带文案**。项目里的 schema 一律不写 locale 相关的
+消息（原因见 [core/auth/schema.ts](src/core/auth/schema.ts)），zod 自带的消息又是英文，
+所以客户端拿字段名自己去翻译。空数组会被基类归一化成 `undefined`，因此"`fields` 存在"
+永远意味着"确实能归到这些字段"。
+
+### Server Action：返回值，不是异常
+
+**生产构建下 Next 会把 Server Action 里所有未捕获的异常替换成一句通用文案加一个
+digest**，所以异常根本没法告诉客户端任何事——"没登录"、"标题超长"、"数据库挂了"抵达
+客户端时长得一模一样。因此预期内的失败一律走返回值，这也是 Next 官方对 expected
+errors 的建议（`node_modules/next/dist/docs/01-app/01-getting-started/10-error-handling.md`）。
+
+契约在 [src/core/action-result.ts](src/core/action-result.ts)：
+
+```ts
+type ActionResult<T> =
+  | { ok: true; data: T }
+  | { ok: false; code: AppErrorCode; fields?: string[] }
+```
+
+写法固定成这样（[src/features/notes/actions.ts](src/features/notes/actions.ts) 是参考实现）：
+
+```ts
+'use server'
+
+export async function createNoteAction(
+  input: CreateNoteValues,
+): Promise<ActionResult<NoteDTO>> {
+  return runAction({
+    name: 'createNote',              // 只用于日志关联
+    schema: createNoteSchema,
+    input,
+    handler: async (parsed, session) => {
+      const note = await createNote(session.user.id, parsed)
+      revalidatePath('/[locale]/notes', 'page')
+      return toNoteDTO(note)
+    },
+  })
+}
+```
+
+`runAction` 包掉四件事：会话校验、schema 解析、错误 → code 映射、日志。三个细节：
+
+- **必须是 `export async function`，不能是 `export const x = wrapper(...)`。**
+  `'use server'` 模块只允许导出 async 函数。
+- **会话在解析入参之前校验。** 未登录的调用方不该能通过"收到的是 UNAUTHORIZED 还是
+  VALIDATION"来试探 schema。`core/action.test.ts` 有用例守这个顺序。
+- **不需要会话的 action 用 `runPublicAction`**（比如将来的"发送验证码"）。故意做成两个
+  函数而不是一个 `auth: false` 选项——"哪些 action 是任何人都能调的"要能一条 grep 查出来，
+  不能藏在选项对象里。
+
+### Route Handler：`withHandler`
+
+[src/core/http.ts](src/core/http.ts) 是对应的另一半。Route Handler 只服务这个 Next.js
+应用之外的消费者（见[分层与依赖方向](#分层与依赖方向)），所以它们的错误契约格外重要——
+那些调用方没法读我们的源码来推断"这个 500 其实是说你的 JSON 格式不对"。
+
+```ts
+export const GET = withHandler(async (request) => {
+  const session = await getRequiredSession()      // 抛 → 401
+  const notes = await listNotes(session.user.id)
+  return Response.json(notes.map(toNoteDTO))
+})
+
+export const PATCH = withHandler<RouteContext<'/api/notes/[id]'>>(
+  async (_request, { params }) => {
+    const session = await getRequiredSession()
+    const { id } = await readParams(params, noteParamsSchema)   // 非 uuid → 400
+    return Response.json(toNoteDTO(await toggleNoteDone(session.user.id, id)))
+  },
+)
+```
+
+- **`RouteContext<'/api/...'>` 是 Next 生成的全局类型**，`params` 的类型直接跟着路由路径走，
+  不用手写一份会漂移的副本。和 layout 里的 `LayoutProps<'/[locale]'>` 是同一套东西。
+- **body 用 `readJson(request, schema)`，不要 `schema.parse(await request.json())`。**
+  后者有两条都会变成 500 的路径：body 不是合法 JSON（`request.json()` 抛 `SyntaxError`，
+  空 body 就够了）、以及 schema 不匹配（裸 `ZodError` 逃出去）。
+- **动态段用 `readParams(params, schema)`。** 路由参数是任意字符串。
+
+### 千万别在包装器里漏掉 `unstable_rethrow`
+
+`runAction` 和 `withHandler` 都是大范围 try/catch，而 **`redirect()` / `notFound()` /
+`permanentRedirect()` 是靠抛内部异常工作的**——被 catch 住就等于被吞掉。所以两个包装器的
+catch **第一句**都是：
+
+```ts
+unstable_rethrow(error)
+```
+
+这个 bug 的症状是静默的：跳转不发生，而调用方只看到一个 `{ ok: false, code: 'INTERNAL' }`。
+`core/action.test.ts` 和 `core/http.test.ts` 各有一条用例守它。将来自己写别的包装器，
+第一句照抄。参考
+`node_modules/next/dist/docs/01-app/03-api-reference/04-functions/unstable_rethrow.md`。
+
+### 日志级别按 code 分
+
+`isClientError(code)`（`INTERNAL` 之外全是 `true`）决定用 `warn` 还是 `error`：调用方
+造成的失败是 `warn` 且不打堆栈，只有真正的故障是 `error`。**把校验失败打成 error 级别，
+是让错误日志失去价值的最快方式。**
+
+### 还缺的部分
+
+页面级的错误边界还没有——`src/app/` 下目前只有 `[locale]/not-found.tsx`，没有
+`error.tsx` 也没有 `global-error.tsx`，所以 Server Component 里抛出的错误在生产环境仍然
+是 Next 的默认错误页。客户端怎么把 `code` / `fields` 变成翻译好的、字段级的提示同样还没做
+（`NoteForm` 里现在是一个 `TODO` 加一个通用 toast）。见[已知遗留与缺口](#已知遗留与缺口)。
 
 ## UI 与主题
 
@@ -635,7 +783,7 @@ import 顺序也是 Biome 自动排的，分组顺序：`bun:`/`node:` → 第�
 
 | 脚本 | 跑什么 | 有没有 DOM |
 | --- | --- | --- |
-| `bun run test:unit` | `src/core` 下的 `*.test.ts`（service、数据层） | 没有 |
+| `bun run test:unit` | `src/core` 下的 `*.test.ts`（错误契约、service、数据层） | 没有（`--preload ./test/unit-setup.ts`） |
 | `bun run test:dom` | `src/components` / `src/features` 下的组件测试 | 有（`--preload ./test/setup.ts`） |
 | `bun run test` | 上面两个依次跑 | |
 | `bun run test:e2e` | Playwright | 真浏览器 |
@@ -665,18 +813,39 @@ import 顺序也是 Biome 自动排的，分组顺序：`bun:`/`node:` → 第�
 `mock.module()` 换掉 `next-auth/react` 和 `@/i18n/navigation`，但**文案用真的 `zh.json`
 配 `NextIntlClientProvider`**——这样改错 message key 会让测试挂，而不是静默渲染出 key 名。
 
-### 单测（数据层）
+### 单测（`src/core/`）
 
-在 `:memory:` 上跑，所以没有建库/删库的开销：
+在 `:memory:` 上跑，所以没有建库/删库的开销。**`DATABASE_URL` 由
+[test/unit-setup.ts](test/unit-setup.ts) 通过 `--preload` 设置**，不要指望在测试文件里设：
 
 ```ts
-process.env.DATABASE_URL = ':memory:'          // 必须在 import 之前
-const { db } = await import('@/core/db/client')  // 动态 import，见下
-await (await import('@/core/db/migrate')).runMigrations()
+// test/unit-setup.ts —— test:unit 脚本 --preload 它
+process.env.DATABASE_URL = ':memory:'
 ```
 
-**动态 import 的顺序是关键**：`src/core/db/client.ts` 在被 import 的那一刻就打开数据库，
-静态 `import` 会被提升到赋值语句上面，于是测试跑到开发库上去。
+为什么只有 preload 才行，这个坑值得完整记一次：
+
+`core/env.ts` 在**模块作用域**校验 `process.env`，消费方读的是那个冻结的 `env` 对象——
+`core/db/client.ts` 打开的是 `env.DATABASE_URL`。于是**进程里第一个 import 到
+`@/core/env` 的模块就替所有后续测试定了 `DATABASE_URL`**。而 `core/logger.ts` 就 import
+它，`core/action.ts`、`core/http.ts` 又 import logger……也就是说一个压根不碰数据库的测试
+文件（比如 `core/http.test.ts`）也会顺手把 env 冻住。`bun test` 又是**所有文件跑在一个
+进程里**，谁先谁后取决于目录遍历顺序。
+
+所以在某个测试文件顶部写 `process.env.DATABASE_URL = ':memory:'` 是不够的：只要**别的**
+文件先加载了 `core/logger.ts`，这句就已经晚了。**症状还特别阴**——那一轮测试跑在
+`./data/dev.db` 上，看起来全绿，然后**下一轮**因为上一轮留下的数据撞 UNIQUE 约束而失败。
+（这就是本项目真实发生过的事，加 `core/http.test.ts` 的时候暴露出来的。）
+
+preload 在任何测试文件求值之前运行，是唯一有保证的时机。`otp.test.ts` 和
+`notes-service.test.ts` 顶部仍然各留了一句同样的赋值 + 动态 import，那是为了**单独跑
+这一个文件**（不带 preload）时也不会碰到开发库的兜底，不是主机制。
+
+跑完可以验一下开发库确实没被动过：
+
+```bash
+stat -f %m data/dev.db && bun run test:unit && stat -f %m data/dev.db   # 两个 mtime 应该相同
+```
 
 ### E2E
 
@@ -688,6 +857,9 @@ await (await import('@/core/db/migrate')).runMigrations()
   见 `e2e/auth.e2e.ts`
 - 文件名必须 `*.e2e.ts`（Bun 的 test runner 会 glob `*.spec.ts`，两个 runner 的 `test()`
   全局变量会打架，所以约定用这个后缀区分）
+- **接口的错误契约在 `e2e/api-errors.e2e.ts` 里断言**，用 Playwright 的 `request` fixture 直接
+  打接口。`core/http.test.ts` 只能证明 `withHandler` 本身对，证明不了
+  `app/api/notes/` 真的接上了它——那里面每一个状态码在包装器出现之前都是 500
 - 浏览器语言在 `playwright.config.ts` 里锁成了 `zh-CN`，所以不带前缀的 URL 断言拿到的是中文；
   要测英文就显式访问 `/en/...`
 
@@ -723,11 +895,15 @@ bun run db:migrate     # 应用
 `src/core/services/tasks-service.ts`。第一个参数一律 `userId`，每个语句的 `where` 都带上它。
 这一层是纯函数集合，不碰 `Request` / `cookies()` / session——那些是调用方的事。
 
+**要报错就抛 `core/errors.ts` 里的类型化错误**，不要 `throw new Error('...')`：找不到行抛
+`NotFoundError`，撞唯一约束抛 `ConflictError`（带上 `fields`）。暴露层靠 `code` 把它翻译成
+`ActionResult` 或 HTTP 状态码，见[错误处理](#错误处理)。
+
 ### 3. 补单测
 
-`src/core/services/tasks-service.test.ts`，照 `notes-service.test.ts` 的套路：先设
-`process.env.DATABASE_URL = ':memory:'`，再**动态 `await import()`** 业务模块，然后
-`runMigrations()`。别忘了那条越权用例。
+`src/core/services/tasks-service.test.ts`，照 `notes-service.test.ts` 的套路：**动态
+`await import()`** 业务模块，然后 `runMigrations()`。`DATABASE_URL` 已经由
+`test/unit-setup.ts` 的 preload 顶成 `:memory:` 了，见[单测](#单测srccore)。别忘了那条越权用例。
 
 ### 4. 定义校验 schema
 
@@ -736,14 +912,15 @@ input / output 两个类型都导出（见 [TypeScript](#typescript)）。
 
 ### 5. 选一条暴露方式
 
-默认只要 Server Action：`src/features/tasks/actions.ts` 写 Server Action——
-`getRequiredSession()` → `schema.parse()` → 调 service → `revalidatePath()`（或者直接把结果
-`return` 给调用方，用来更新本地状态 / SWR 缓存，不用等重新拉取）。表单提交、增删改、客户端搜索、
-乐观更新——只要消费者是这个 Next.js 应用自己，都走这条。
+默认只要 Server Action：`src/features/tasks/actions.ts` 里一个 `export async function`，
+函数体就一个 `runAction({ name, schema, input, handler })`。会话校验、schema 解析、错误映射、
+日志都在 `runAction` 里，handler 只写"创建一个 task"这件事本身。表单提交、增删改、客户端搜索、
+乐观更新——只要消费者是这个 Next.js 应用自己，都走这条。完整写法和三个细节见
+[错误处理](#错误处理)。
 
 只有真的要给应用之外的消费者用（第三方调用方、移动端、webhook 接收端）才另外写 Route Handler：
-`src/app/api/tasks/route.ts`，每个 handler 先 `auth()`（或其它鉴权）判 401 → parse → 调 service；
-key 加到 `src/features/tasks/swr-keys.ts`。
+`src/app/api/tasks/route.ts`，用 `withHandler` 包起来，body 走 `readJson`、动态段走
+`readParams`；key 加到 `src/features/tasks/swr-keys.ts`。
 
 两者可以同时存在，但不要仅仅因为"要在客户端触发"就选第二条——那种场景第一条也能做到，见
 [分层与依赖方向](#分层与依赖方向)的暴露方式优先级。要过网络就加一个 `dto.ts`，见
@@ -783,7 +960,7 @@ key 加到 `src/features/tasks/swr-keys.ts`。
 | `bun run lint:fix` | 自动修 + 格式化 + 排 import |
 | `bun run typecheck` | `next typegen && tsc --noEmit` |
 | `bun run test` | `test:unit` + `test:dom` |
-| `bun run test:unit` / `test:dom` | 数据层单测 / 组件测试，见[测试](#测试) |
+| `bun run test:unit` / `test:dom` | `src/core` 单测 / 组件测试，见[测试](#测试) |
 | `bun run test:e2e` | Playwright |
 | `bun run db:generate` | `drizzle-kit generate` —— **生成迁移 SQL** |
 | `bun run db:migrate` | 应用迁移 |
@@ -833,18 +1010,42 @@ CI（`.github/workflows/ci.yml`）四个并行 job：`lint` / `typecheck` / `tes
 1. **手机验证码是固定演示码，没有接真实短信厂商。** `src/core/auth/otp.ts` 不生成、不存储、
    不发送任何验证码——`authorize()` 直接比对 `DEMO_VERIFICATION_CODE`（`123456`）。真要上线
    之前必须换掉，见[认证](#认证)一节。
-2. **`src/core/storage/local-stub.ts` 只是占位**，写本地磁盘。真要用文件存储就照 `StorageAdapter`
+2. **没有任何限流。** `authorize()` 可以被无限次调用来爆破验证码；换成真 OTP 之后，发码接口
+   被刷等于直接的短信账单。`core/errors.ts` 已经预留了 `RateLimitedError` / `RATE_LIMITED`
+   （429），但还没有任何地方抛它，也还没有限流器。
+3. **页面级错误边界还没有。** `src/app/` 下只有 `[locale]/not-found.tsx`，没有 `error.tsx`、
+   没有 `global-error.tsx`、没有 `loading.tsx`。所以 Server Component 里抛出的错误在生产环境
+   仍然是 Next 的默认错误页（白底 "Application error"），没有 i18n 也没有品牌。
+   注意 Next 16 的签名是 `{ error, retry }`（`retry` 从 16.3 起稳定），不是老的 `reset`；
+   `global-error.tsx` 还必须自带 `<html>`/`<body>` 且**不会继承全局样式**。
+4. **客户端还没有消费错误契约。** 服务端已经给出 `code` / `fields`（见[错误处理](#错误处理)），
+   但 `NoteForm` 里仍然是一个 `TODO` 加一句通用 toast——还没把 `fields` 回填到
+   `react-hook-form` 的 `setError()`，也还没有按 `code` 分文案的 `Errors` namespace。
+5. **`src/core/storage/local-stub.ts` 只是占位**，写本地磁盘。真要用文件存储就照 `StorageAdapter`
    接口换成 S3/R2 实现。
-3. **403 页没有任何地方会跳转过去。** 登录拦截解决的是"未登录"（弹到 `/login`），而项目里还没有
-   角色模型，所以没有"已登录但无权限"这种情况。加了角色判断之后让它 `redirect('/403')`。
-4. **登录页的微信按钮是禁用的占位。** 后端没有对应 provider，接法见
-   `src/core/auth/config.ts` 的 `providers`。
-5. **没有 `authenticator` 表。** `@auth/drizzle-adapter` 的 WebAuthn 方法会去查它，
-   表不存在时那些方法运行时会炸。本模板不用 WebAuthn，所以没建；要用的话往
-   `src/core/db/schema.ts` 里补一个，并把它传给 `DrizzleAdapter`。
-6. **英文文案是从中文翻译来的占位内容**，dashboard 和登录页左侧插画那些都是展示用的样例文字，
-   不是真实业务文案。
-7. **`/dashboard` 和 `/notes` 都是给你删的。** 前者是设计系统活文档，后者是业务示例。
+6. **403 页没有任何地方会跳转过去。** 登录拦截解决的是"未登录"（弹到 `/login`），而项目里还没有
+   角色模型，所以没有"已登录但无权限"这种情况。加了角色判断之后，service 抛 `ForbiddenError`
+   （`core/errors.ts` 里已经有了），让页面 `redirect('/403')`。
+   > 另一条路是 Next 的 `forbidden()` / `unauthorized()` 加 `forbidden.tsx` /
+   > `unauthorized.tsx`，能顺手填掉这个缺口。**本项目刻意没走这条**：它需要打开
+   > `experimental.authInterrupts`，模板不想依赖实验性 API；而且它靠抛中断工作，会被
+   > `runAction` / `withHandler` 的 try/catch 影响（要靠 `unstable_rethrow` 放行）。
+7. **`listNotes` 没有分页。** 一个 `select *` 全表返回。`notes` 是[标准流程](#新增业务的标准流程)
+   会被照抄的模板，所以这条会传染到真实业务表上。另外搜索用的
+   `like(lower(title), '%q%')` 没有转义用户输入里的 `%` / `_`（搜 `%` 匹配全部），
+   而 `lower()` 也让索引失效。
+8. **`notesTable` 只有 `createdAt`，没有 `updatedAt`**，也没有软删除。多数生产表需要前者
+   （Drizzle 的 `$onUpdate`）。
+9. **一个 `db.transaction()` 示例都没有**，[标准流程](#新增业务的标准流程)里也没提。真实业务
+   （下单、扣库存）少不了它。
+10. **登录页的微信按钮是禁用的占位。** 后端没有对应 provider，接法见
+    `src/core/auth/config.ts` 的 `providers`。
+11. **没有 `authenticator` 表。** `@auth/drizzle-adapter` 的 WebAuthn 方法会去查它，
+    表不存在时那些方法运行时会炸。本模板不用 WebAuthn，所以没建；要用的话往
+    `src/core/db/schema.ts` 里补一个，并把它传给 `DrizzleAdapter`。
+12. **英文文案是从中文翻译来的占位内容**，dashboard 和登录页左侧插画那些都是展示用的样例文字，
+    不是真实业务文案。
+13. **`/dashboard` 和 `/notes` 都是给你删的。** 前者是设计系统活文档，后者是业务示例。
 
 ### 主动放弃的东西（不是缺口）
 

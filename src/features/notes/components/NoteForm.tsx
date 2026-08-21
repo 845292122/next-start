@@ -48,17 +48,31 @@ export function NoteForm() {
 	})
 
 	const onSubmit = handleSubmit(async (values) => {
+		// Two distinct failure modes, hence both a result check and a catch:
+		// `createNoteAction` reports *expected* failures as `{ ok: false }` (see
+		// core/action-result.ts), while a dead network or a crashed server still
+		// makes the call itself throw.
+		let result: Awaited<ReturnType<typeof createNoteAction>>
 		try {
-			await createNoteAction(values)
-			// Revalidate rather than write the returned row in by hand: the list is
-			// sorted by createdAt and filtered by the search box, so the server is
-			// the only thing that knows where the new note belongs.
-			await mutate(notesKey())
-			reset()
-			toast.success(t('created'))
+			result = await createNoteAction(values)
 		} catch {
 			toast.danger(t('createFailed'))
+			return
 		}
+
+		if (!result.ok) {
+			// TODO(批次 2): map result.code / result.fields onto translated,
+			// field-level messages via setError() instead of one generic toast.
+			toast.danger(t('createFailed'))
+			return
+		}
+
+		// Revalidate rather than write `result.data` in by hand: the list is sorted
+		// by createdAt and filtered by the search box, so the server is the only
+		// thing that knows where the new note belongs.
+		await mutate(notesKey())
+		reset()
+		toast.success(t('created'))
 	})
 
 	return (

@@ -19,5 +19,13 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
   mobile clients, webhooks, or framework-mandated callbacks (`api/auth/[...nextauth]`).
 - **Never write SQL in a page, Route Handler, or Server Action.** All data access goes through
   `src/core/services/`; everything else only calls those functions.
+- **Errors have a contract — don't hand-roll one.** Services throw the typed errors in
+  `src/core/errors.ts`. A Server Action is an `export async function` whose body is one
+  `runAction({...})` call (`src/core/action.ts`) and returns `ActionResult<T>`; a Route Handler
+  is wrapped in `withHandler` and reads input via `readJson` / `readParams`
+  (`src/core/http.ts`). Never `throw new Error('...')`, never `schema.parse()` on untrusted
+  input, never a hand-written `if (!session) return 401`. If you write your own try/catch
+  wrapper, `unstable_rethrow(error)` must be its first statement or `redirect()` and
+  `notFound()` break silently.
 - Full rationale and the one documented exception (`notes`' `NoteList`, a legacy demo of the
   SWR + Route Handler path) are in [DEVELOPMENT.md § 分层与依赖方向](DEVELOPMENT.md#分层与依赖方向).

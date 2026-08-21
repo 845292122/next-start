@@ -63,7 +63,9 @@ bun run dev
 
 1. 改 `package.json` 的 `name`、`src/i18n/messages/*.json` 里的 `Meta`。
 2. 不需要示例业务就删掉 `src/features/notes/`、`src/core/services/notes-service*.ts`、
-   `src/app/api/notes/`、`src/app/[locale]/(app)/notes/`，以及 `NavLinks.ts` 里那一条和
-   `e2e/notes.e2e.ts`。
+   `src/app/api/notes/`、`src/app/[locale]/(app)/notes/`，以及 `NavLinks.ts` 里那一条、
+   `e2e/notes.e2e.ts` 和 `e2e/api-errors.e2e.ts`。
+   > `src/core/` 下的 `errors.ts` / `action.ts` / `http.ts` / `validation.ts` 和它们的
+   > `*.test.ts` **不要删**——那是错误契约的地基，不属于示例业务。
 3. `src/app/[locale]/(app)/dashboard/page.tsx` 是主题展示页，真业务落地后整页删掉。
 4. 加自己的业务：照 [DEVELOPMENT.md 的标准流程](DEVELOPMENT.md#新增业务的标准流程)走。

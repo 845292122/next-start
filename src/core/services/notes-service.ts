@@ -1,6 +1,7 @@
 import { and, desc, eq, like, sql } from 'drizzle-orm'
 import { db } from '@/core/db/client'
 import { notesTable } from '@/core/db/schema'
+import { NotFoundError } from '@/core/errors'
 
 /**
  * Every function here takes `userId` first and puts it in the `where` of every
@@ -44,7 +45,10 @@ export async function toggleNoteDone(userId: string, noteId: string) {
 		.select()
 		.from(notesTable)
 		.where(and(eq(notesTable.id, noteId), eq(notesTable.userId, userId)))
-	if (!existing) throw new Error('note not found')
+	// NotFoundError, not ForbiddenError, when the row belongs to someone else:
+	// distinguishing the two would tell a caller which ids exist. The `userId` in
+	// the where clause above is what collapses both cases to this one throw.
+	if (!existing) throw new NotFoundError('note not found')
 
 	const [note] = await db
 		.update(notesTable)
