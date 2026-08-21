@@ -17,7 +17,7 @@ import {
 	listNotesAction,
 	toggleNoteAction,
 } from '@/features/notes/actions'
-import type { NoteDTO } from '@/features/notes/dto'
+import type { NoteDTO, NotePage } from '@/features/notes/dto'
 import { notesKey } from '@/features/notes/swr-keys'
 import { useActionErrorMessage } from '@/lib/action-error'
 
@@ -30,32 +30,47 @@ import { useActionErrorMessage } from '@/lib/action-error'
  * Handler (see AGENTS.md). Those handlers remain as the worked example of the
  * external-consumer path, but nothing in this app calls them.
  */
-export function NoteList({ initial }: { initial: NoteDTO[] }) {
+export function NoteList({
+	initial,
+	pageSize,
+}: {
+	initial: NotePage
+	/** The service's default page size, passed down so the two can't drift. */
+	pageSize: number
+}) {
 	const t = useTranslations('Notes')
 	const format = useFormatter()
 	const errorMessage = useActionErrorMessage()
 	const [query, setQuery] = useState('')
+	// Grows the window rather than paging: one SWR cache entry per (query, limit),
+	// so the optimistic toggle/delete below stay simple — they only ever have one
+	// list to patch. A page-numbered UI would pass `offset` instead, which the
+	// action already accepts.
+	const [limit, setLimit] = useState(pageSize)
 
 	const {
-		data: notes,
+		data: page,
 		isLoading,
 		mutate,
 	} = useSWR(
-		notesKey(query),
+		notesKey(query, limit),
 		// An explicit fetcher, because the key is a tuple rather than a URL. The
 		// ActionResult is unwrapped here so that everything below this line deals in
 		// plain data: a failure becomes a thrown error, which is what SWR's own
 		// error/rollback handling is built around.
-		async ([, q]) => {
-			const result = await listNotesAction({ query: q || undefined })
+		async ([, q, take]) => {
+			const result = await listNotesAction({
+				query: q || undefined,
+				limit: take,
+			})
 			if (!result.ok) throw new Error(errorMessage(result))
 			return result.data
 		},
 		{
-			// The unfiltered list was already server-rendered by the page, so the
-			// first paint needs no request. A search narrows the key, which
-			// legitimately misses the cache and fetches.
-			fallbackData: query ? undefined : initial,
+			// The first page was already server-rendered, so the first paint needs no
+			// request. A search or a bigger window narrows the key, which legitimately
+			// misses the cache and fetches.
+			fallbackData: query || limit !== pageSize ? undefined : initial,
 			keepPreviousData: true,
 			onError: (error: Error) => toast.danger(error.message),
 		},
@@ -71,8 +86,12 @@ export function NoteList({ initial }: { initial: NoteDTO[] }) {
 				return undefined
 			},
 			{
-				optimisticData: (current = []) =>
-					current.map((n) => (n.id === note.id ? { ...n, done: !n.done } : n)),
+				optimisticData: (current) => ({
+					total: current?.total ?? 0,
+					items: (current?.items ?? []).map((n) =>
+						n.id === note.id ? { ...n, done: !n.done } : n,
+					),
+				}),
 				rollbackOnError: true,
 				populateCache: false,
 			},
@@ -87,8 +106,12 @@ export function NoteList({ initial }: { initial: NoteDTO[] }) {
 				return undefined
 			},
 			{
-				optimisticData: (current = []) =>
-					current.filter((n) => n.id !== note.id),
+				optimisticData: (current) => ({
+					// The total drops too, or the "load more" hint would still claim
+					// there's another row behind the one just removed.
+					total: Math.max((current?.total ?? 1) - 1, 0),
+					items: (current?.items ?? []).filter((n) => n.id !== note.id),
+				}),
 				rollbackOnError: true,
 				populateCache: false,
 			},
@@ -109,13 +132,13 @@ export function NoteList({ initial }: { initial: NoteDTO[] }) {
 				</SearchField.Group>
 			</SearchField>
 
-			{isLoading && !notes ? (
+			{isLoading && !page ? (
 				<div className="flex justify-center p-8">
 					<Spinner />
 				</div>
-			) : notes?.length ? (
+			) : page?.items.length ? (
 				<ul className="flex flex-col gap-2">
-					{notes.map((note) => (
+					{page.items.map((note) => (
 						<li
 							key={note.id}
 							className="border-border bg-surface flex items-start gap-3 rounded-xl border p-4"
@@ -187,6 +210,21 @@ export function NoteList({ initial }: { initial: NoteDTO[] }) {
 						{query ? t('noResultsHint') : t('emptyHint')}
 					</p>
 				</EmptyState>
+			)}
+
+			{/*
+			 * Only rendered when the server says there are more rows than we hold.
+			 * `total` counts every match, so this is honest under a search filter too.
+			 */}
+			{page && page.total > page.items.length && (
+				<Button
+					variant="secondary"
+					className="self-center"
+					isPending={isLoading}
+					onPress={() => setLimit((current) => current + pageSize)}
+				>
+					{t('loadMore', { remaining: page.total - page.items.length })}
+				</Button>
 			)}
 		</div>
 	)

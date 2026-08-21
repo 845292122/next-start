@@ -102,3 +102,53 @@ test.describe('/api/notes/[id] error contract', () => {
 		expect(response.status()).toBe(204)
 	})
 })
+
+test.describe('/api/notes pagination contract', () => {
+	test('GET returns an envelope with a total, not a bare array', async ({
+		request,
+	}) => {
+		// The published response shape for external consumers. `total` is what lets
+		// them know whether to ask for another page; adding it later would have been
+		// a breaking change.
+		const body = await (await request.get('/api/notes?limit=1')).json()
+
+		expect(Array.isArray(body.items)).toBe(true)
+		expect(body.items.length).toBeLessThanOrEqual(1)
+		expect(typeof body.total).toBe('number')
+	})
+
+	test('limit and offset are honoured', async ({ request }) => {
+		// Two notes of our own, so this doesn't depend on what else the suite created.
+		const tag = `Paging-${test.info().testId}`
+		for (const n of [1, 2]) {
+			await request.post('/api/notes', { data: { title: `${tag}-${n}` } })
+		}
+
+		const first = await (
+			await request.get(`/api/notes?q=${tag}&limit=1`)
+		).json()
+		const second = await (
+			await request.get(`/api/notes?q=${tag}&limit=1&offset=1`)
+		).json()
+
+		expect(first.total).toBe(2)
+		expect(first.items).toHaveLength(1)
+		expect(second.items).toHaveLength(1)
+		// Different rows, so offset actually moved the window.
+		expect(second.items[0].id).not.toBe(first.items[0].id)
+	})
+
+	test('a non-numeric limit is a 400, not a NaN reaching the database', async ({
+		request,
+	}) => {
+		// Query params are strings; this is what listNotesQuerySchema is for.
+		const response = await request.get('/api/notes?limit=abc')
+
+		expect(response.status()).toBe(400)
+		expect(await response.json()).toMatchObject({ error: 'VALIDATION' })
+	})
+
+	test('an over-large limit is refused at the edge', async ({ request }) => {
+		expect((await request.get('/api/notes?limit=100000')).status()).toBe(400)
+	})
+})

@@ -9,7 +9,7 @@ import {
 	listNotes,
 	toggleNoteDone,
 } from '@/core/services/notes-service'
-import type { NoteDTO } from '@/features/notes/dto'
+import type { NoteDTO, NotePage } from '@/features/notes/dto'
 import { toNoteDTO } from '@/features/notes/dto'
 import {
 	type CreateNoteValues,
@@ -70,17 +70,22 @@ export async function createNoteAction(
  * A Server Action being used to *read* is deliberate and is the point of the
  * convention in AGENTS.md: needing to fetch from the client is not a reason to
  * add a Route Handler. No `revalidatePath` here — this reads.
+ *
+ * Returns the page plus the total, so the caller can tell whether more exist
+ * without asking again.
  */
 export async function listNotesAction(input: {
 	query?: string
-}): Promise<ActionResult<NoteDTO[]>> {
+	limit?: number
+	offset?: number
+}): Promise<ActionResult<NotePage>> {
 	return runAction({
 		name: 'listNotes',
 		schema: listNotesSchema,
 		input,
 		handler: async (parsed, session) => {
-			const notes = await listNotes(session.user.id, parsed.query)
-			return notes.map(toNoteDTO)
+			const page = await listNotes(session.user.id, parsed)
+			return { items: page.items.map(toNoteDTO), total: page.total }
 		},
 	})
 }

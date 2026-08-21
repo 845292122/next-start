@@ -1,8 +1,9 @@
 import { getRequiredSession } from '@/core/auth/session'
 import { readJson, withHandler } from '@/core/http'
 import { createNote, listNotes } from '@/core/services/notes-service'
+import { parseOrThrow } from '@/core/validation'
 import { toNoteDTO } from '@/features/notes/dto'
-import { createNoteSchema } from '@/features/notes/schema'
+import { createNoteSchema, listNotesQuerySchema } from '@/features/notes/schema'
 
 /**
  * The worked example of the **external-consumer** path: third-party callers,
@@ -27,10 +28,24 @@ import { createNoteSchema } from '@/features/notes/schema'
 export const GET = withHandler(async (request) => {
 	const session = await getRequiredSession()
 
-	const query = new URL(request.url).searchParams.get('q') ?? undefined
-	const notes = await listNotes(session.user.id, query)
+	// Query params are strings; the schema is what turns `?limit=abc` into a 400
+	// rather than a NaN that reaches the service.
+	const params = new URL(request.url).searchParams
+	const { query, limit, offset } = parseOrThrow(listNotesQuerySchema, {
+		query: params.get('q') ?? undefined,
+		limit: params.get('limit') ?? undefined,
+		offset: params.get('offset') ?? undefined,
+	})
 
-	return Response.json(notes.map(toNoteDTO))
+	const page = await listNotes(session.user.id, { query, limit, offset })
+
+	// The envelope, not a bare array: an external consumer needs the total to know
+	// whether to ask for another page, and adding it later would be a breaking
+	// change to a published response shape.
+	return Response.json({
+		items: page.items.map(toNoteDTO),
+		total: page.total,
+	})
 })
 
 export const POST = withHandler(async (request) => {

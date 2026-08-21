@@ -18,6 +18,7 @@ export type NoteDTO = {
 	body: string
 	done: boolean
 	createdAt: string
+	updatedAt: string
 }
 
 export function toNoteDTO(note: Note): NoteDTO {
@@ -27,5 +28,17 @@ export function toNoteDTO(note: Note): NoteDTO {
 		body: note.body,
 		done: note.done,
 		createdAt: note.createdAt.toISOString(),
+		updatedAt: note.updatedAt.toISOString(),
 	}
+}
+
+/**
+ * A page of notes plus the total matching the same filter.
+ *
+ * `total` is what lets the UI say "there are more" without a second round trip;
+ * it counts every match, not just the rows in `items`.
+ */
+export type NotePage = {
+	items: NoteDTO[]
+	total: number
 }

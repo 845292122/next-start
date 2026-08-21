@@ -118,6 +118,7 @@
 		"empty": "No notes yet",
 		"emptyHint": "Add your first one with the form above.",
 		"noResults": "No matching notes",
+		"loadMore": "Load more ({remaining, number} left)",
 		"noResultsHint": "Try a different keyword."
 	},
 	"Settings": {

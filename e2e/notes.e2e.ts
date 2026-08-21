@@ -15,6 +15,12 @@ function uniqueTitle(label: string) {
 test('shows the seeded notes', async ({ page }) => {
 	await page.goto('/notes')
 	await expect(page.getByRole('heading', { name: '笔记' })).toBeVisible()
+
+	// Found via search rather than expected on the first page. The list is
+	// paginated now (20 rows) and the seeded notes are the *oldest*, so any test
+	// that adds enough notes would push them off page one — asserting on page one
+	// would make this fail depending on execution order and volume.
+	await page.getByRole('searchbox').fill('Welcome')
 	await expect(page.getByText('Welcome', { exact: true })).toBeVisible()
 })
 
@@ -97,4 +103,32 @@ test('toggles and deletes a note', async ({ page }) => {
 
 	await page.reload()
 	await expect(page.locator('li').filter({ hasText: title })).toHaveCount(0)
+})
+
+test('the load-more button widens the page', async ({ page, request }) => {
+	// Notes are created through the API rather than the form: this needs more rows
+	// than the 20-row page size, and 20 form submissions would be slow and would
+	// prove nothing extra.
+	const tag = `LoadMore-${test.info().testId}`
+	await Promise.all(
+		Array.from({ length: 22 }, (_, i) =>
+			request.post('/api/notes', { data: { title: `${tag}-${i}` } }),
+		),
+	)
+
+	await page.goto('/notes')
+	// Filter to just these, so the assertion doesn't depend on what else exists.
+	await page.getByRole('searchbox').fill(tag)
+
+	const rows = page.locator('li').filter({ hasText: tag })
+	await expect(rows).toHaveCount(20)
+
+	// The button only appears because the server reported total > items.length.
+	const loadMore = page.getByRole('button', { name: /加载更多/ })
+	await expect(loadMore).toBeVisible()
+	await loadMore.click()
+
+	await expect(rows).toHaveCount(22)
+	// Nothing left to fetch, so the affordance goes away.
+	await expect(loadMore).toBeHidden()
 })

@@ -100,8 +100,21 @@ export const notesTable = sqliteTable(
 		createdAt: integer('createdAt', { mode: 'timestamp' })
 			.notNull()
 			.default(sql`(unixepoch())`),
+		// `$onUpdate` is a *drizzle-side* default: it fires when an update goes
+		// through drizzle, and not for raw SQL that bypasses it. The column default
+		// covers the insert.
+		updatedAt: integer('updatedAt', { mode: 'timestamp' })
+			.notNull()
+			.default(sql`(unixepoch())`)
+			.$onUpdate(() => new Date()),
 	},
-	(table) => [index('note_userId_idx').on(table.userId)],
+	(table) => [
+		// Covers both the userId filter and the createdAt ordering that
+		// notes-service's list query always applies, so pagination doesn't have to
+		// sort the whole table. Column order matters: equality first, then the range
+		// or sort column.
+		index('note_userId_createdAt_idx').on(table.userId, table.createdAt),
+	],
 )
 
 /** Row types are inferred, never hand-written. */

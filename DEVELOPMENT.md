@@ -11,6 +11,7 @@
 - [目录结构](#目录结构)
 - [分层与依赖方向](#分层与依赖方向)
 - [数据层](#数据层)
+  - [查询一律有界，读写不变量用事务](#查询一律有界读写不变量用事务)
 - [错误处理](#错误处理)
 - [可观测性](#可观测性)
 - [安全](#安全)
@@ -289,25 +290,65 @@ src/core/db/
 ### SQLite 的几个坑
 
 - **`DATABASE_URL` 是文件路径，不是 URL。** 写成 `./data/dev.db`，这样 drizzle-kit 和运行时
-  能共用一个值。libsql 需要 scheme，`client.ts` 里的 `toLibsqlUrl()` 负责补 `file:`；
-  `:memory:` 原样透传。`src/core/env.ts` 因此用 `z.string()` 校验它，不是 `z.url()`。
+  能共用一个值。libsql 需要 scheme，`client.ts` 里的 `toLibsqlUrl()` 负责补 `file:`。
+  `src/core/env.ts` 因此用 `z.string()` 校验它，不是 `z.url()`。
+- **`:memory:` 会被换成 `file::memory:?cache=shared`，这一步不能省。** 裸的内存库是
+  **单连接私有**的，而 `@libsql/client` 会为 `db.transaction()` **另开一个连接**。结果是：
+  任何针对 `:memory:` 的事务都看到一个空库，事务结束后连原来的连接都用不了了——实测
+  一个只提交、什么都不写的事务就足以触发，之后每条查询都报 `no such table`。
+  单测跑在内存库上、生产跑在文件上，所以不换的话**事务在这个项目里根本没法测**。
+  共享缓存的 URI 正是 SQLite 给这个问题的答案：一个进程内共用的内存库。
+  `notes-service.test.ts` 里有一条用例（"a rollback leaves the schema usable"）守它。
 - **外键默认是开的——但只是因为用了 libsql。** 裸 SQLite（和 `better-sqlite3`）默认关闭外键，
   而且这个设置是**每个连接**一次的。`client.ts` 里没写 `PRAGMA foreign_keys = ON` 是验证过的
   结论，不是漏了。换驱动的话必须加回来，否则 `onDelete: 'cascade'` 全部静默失效。
-- **没有 `ilike`。** SQLite 的裸 `LIKE` 只对 ASCII 大小写无关，还受列 collation 影响。
-  大小写无关搜索要显式套 `lower()`：
+- **没有 `ilike`，而且 `LIKE` 的通配符必须自己转义。** 两件事一起处理，见
+  `notes-service.ts` 的 `listNotes`：
+  - 裸 `LIKE` 只对 ASCII 大小写无关，还受列 collation 影响，所以显式套 `lower()`。
+    代价是这个表达式**用不上索引**，等于扫这个用户的行——数据量大的域应该换 SQLite 的 FTS5。
+  - 用户输入里的 `%` 和 `_` 是通配符。不转义的话搜 `%` 匹配全部、`_` 匹配任意单字符。
+    这不是注入（drizzle 会参数化），但搜索框会静默地不按用户说的做。
+    **SQLite 默认没有转义字符**，必须显式写 `ESCAPE`；而 drizzle 的 `like()` 只接受
+    `(column, pattern)` 两个参数，挂不上 `ESCAPE` 子句，所以那里是手写的 `sql` 模板。
+    转义反斜杠本身要放在最前面，否则会把它二次转义。
 
-  ```ts
-  like(sql`lower(${notesTable.title})`, `%${query.toLowerCase()}%`)
-  ```
-
-  `notes-service.test.ts` 和 `e2e/notes.e2e.ts` 各有一条用例守这个。
+  `notes-service.test.ts` 有三条用例分别守大小写、`%`、`_` 和字面反斜杠。
 - **时间戳有两种单位，别混。** auth 那三张表的 `emailVerified` / `expires` 必须是
   `integer({ mode: 'timestamp_ms' })`——`@auth/drizzle-adapter` 写死了毫秒。我们自己的
   `note.createdAt` 用 `integer({ mode: 'timestamp' })`（秒），配 `default(sql\`(unixepoch())\`)`。
   单位搞错不会报错，只会把时间算到 1970 年。
 - **`.returning()` 要配 `await`。** 不 await 拿到的是查询构造器，
   `const [x] = db.insert(...).returning()` 会抛 "not iterable"。
+- **单写者模型。** SQLite 的写操作串行化在一个写者上，所以持有写锁的事务是**阻塞**其他写者，
+  而不是和它们死锁。推论：事务要短，绝对不要在事务里 `await` 无关的东西（比如一个 HTTP 调用）。
+
+### 查询一律有界，读写不变量用事务
+
+`notes` 是[标准流程](#新增业务的标准流程)会被逐字照抄的模板，所以这两条写在 service 层，
+不在调用方。
+
+**分页。** `listNotes` 返回 `{ items, total, limit, offset }`，永远有界：
+
+- 默认 20 条（`NOTES_PAGE_SIZE`），硬上限 100（服务内部常量）。
+- **`limit` 在 service 里再夹一次**，即使暴露层的 zod 已经校验过。schema 保护的是那一个入口，
+  service 要对**所有**调用方安全，包括将来的服务端调用方。有用例断言 `limit: 1_000_000`
+  会被夹到 100。
+- `total` 是**符合同一过滤条件的总数**，不是本页条数——调用方靠它判断还有没有更多。
+- UI 走的是"加宽窗口"而不是翻页：`NoteList` 只增大 `limit`。这样每个
+  `(query, limit)` 只有一个 SWR 缓存项，下面的乐观更新只需要修补一份列表。
+  要做页码式分页就传 `offset`，action 和接口都已经支持。
+- 索引跟着查询走：`note_userId_createdAt_idx` 是复合索引，等值列在前、排序列在后，
+  所以分页不用排整张表。
+
+**事务。** `createNote` 是模板里的事务示例，而它需要事务的原因是**配额检查**：
+先 count 再 insert 是两条语句，没有事务的话两个并发请求可以都读到 499、都插入成功。
+这个"先读后写"的形状正是事务存在的意义，也是绝大多数真实不变量的形状（库存、余额、占座）。
+
+在回调里 throw 就会回滚（drizzle 发 `ROLLBACK`），所以配额拒绝不会留下半个写入。
+配额值（500）是随便定的，**它启用的那个检查才是重点**。
+
+> 抄这段之前先读 [SQLite 的几个坑](#sqlite-的几个坑)里关于 `:memory:` 和单写者的两条——
+> 事务在这个技术栈上有两个非显然的前提。
 
 ### Drizzle 相对 Prisma 的两个便利
 
@@ -1188,6 +1229,10 @@ bun run db:migrate     # 应用
 `NotFoundError`，撞唯一约束抛 `ConflictError`（带上 `fields`）。暴露层靠 `code` 把它翻译成
 `ActionResult` 或 HTTP 状态码，见[错误处理](#错误处理)。
 
+**列表查询必须有界**，参数是 `{ query?, limit?, offset? }`，返回 `{ items, total }`，
+并且在 service 里夹一次 `limit`——别信调用方传来的值。**先读后写的不变量用 `db.transaction()`**。
+两者的完整理由和 SQLite 上的两个前提见[查询一律有界，读写不变量用事务](#查询一律有界读写不变量用事务)。
+
 ### 3. 补单测
 
 `src/core/services/tasks-service.test.ts`，照 `notes-service.test.ts` 的套路：**动态
@@ -1344,22 +1389,19 @@ CI（`.github/workflows/ci.yml`）四个并行 job：`lint` / `typecheck` / `tes
    > `unauthorized.tsx`，能顺手填掉这个缺口。**本项目刻意没走这条**：它需要打开
    > `experimental.authInterrupts`，模板不想依赖实验性 API；而且它靠抛中断工作，会被
    > `runAction` / `withHandler` 的 try/catch 影响（要靠 `unstable_rethrow` 放行）。
-7. **`listNotes` 没有分页。** 一个 `select *` 全表返回。`notes` 是[标准流程](#新增业务的标准流程)
-   会被照抄的模板，所以这条会传染到真实业务表上。另外搜索用的
-   `like(lower(title), '%q%')` 没有转义用户输入里的 `%` / `_`（搜 `%` 匹配全部），
-   而 `lower()` 也让索引失效。
-8. **`notesTable` 只有 `createdAt`，没有 `updatedAt`**，也没有软删除。多数生产表需要前者
-   （Drizzle 的 `$onUpdate`）。
-9. **一个 `db.transaction()` 示例都没有**，[标准流程](#新增业务的标准流程)里也没提。真实业务
-   （下单、扣库存）少不了它。
-10. **登录页的微信按钮是禁用的占位。** 后端没有对应 provider，接法见
-    `src/core/auth/config.ts` 的 `providers`。
-11. **没有 `authenticator` 表。** `@auth/drizzle-adapter` 的 WebAuthn 方法会去查它，
+7. **没有软删除。** `notesTable` 有 `createdAt` / `updatedAt`，但删除是真删。需要"回收站"或
+   审计的话加 `deletedAt`，并记得**每个查询的 `where` 都要带上它**——漏一个就等于泄露已删数据。
+8. **标题搜索是 `LIKE` 扫表。** 通配符已经转义、大小写已经处理（见
+   [SQLite 的几个坑](#sqlite-的几个坑)），但 `lower()` 让表达式用不上索引，所以搜索是扫这个
+   用户的行。每用户数据量大的域应该换 SQLite 的 FTS5。
+9. **登录页的微信按钮是禁用的占位。** 后端没有对应 provider，接法见
+   `src/core/auth/config.ts` 的 `providers`。
+10. **没有 `authenticator` 表。** `@auth/drizzle-adapter` 的 WebAuthn 方法会去查它，
     表不存在时那些方法运行时会炸。本模板不用 WebAuthn，所以没建；要用的话往
     `src/core/db/schema.ts` 里补一个，并把它传给 `DrizzleAdapter`。
-12. **英文文案是从中文翻译来的占位内容**，dashboard 和登录页左侧插画那些都是展示用的样例文字，
+11. **英文文案是从中文翻译来的占位内容**，dashboard 和登录页左侧插画那些都是展示用的样例文字，
     不是真实业务文案。
-13. **`/dashboard` 和 `/notes` 都是给你删的。** 前者是设计系统活文档，后者是业务示例。
+12. **`/dashboard` 和 `/notes` 都是给你删的。** 前者是设计系统活文档，后者是业务示例。
 
 ### 主动放弃的东西（不是缺口）
 

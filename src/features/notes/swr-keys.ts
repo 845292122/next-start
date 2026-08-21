@@ -6,12 +6,16 @@ import type { Key } from 'swr'
  * These used to be `/api/notes?q=...` URL strings, back when `NoteList` fetched
  * through the route handlers. Now that it reads through `listNotesAction` there's
  * no URL involved, so the key is a plain tuple — SWR serializes arrays
- * structurally, so `['notes', 'abc']` is a stable, distinct key per query.
+ * structurally, so `['notes', 'abc', 20]` is a stable, distinct key per
+ * (query, limit) pair.
+ *
+ * The limit is part of the key because it changes the response: a wider window is
+ * a different cache entry, not a stale version of the same one.
  *
  * The `'notes'` prefix isn't decoration: it's what `notesKeyFilter` matches on.
  */
-export function notesKey(query?: string) {
-	return ['notes', query ?? ''] as const
+export function notesKey(query?: string, limit?: number) {
+	return ['notes', query ?? '', limit ?? 0] as const
 }
 
 /**

@@ -121,6 +121,7 @@ declare const messages: {
 		"empty": "还没有笔记",
 		"emptyHint": "用上面的表单添加第一条。",
 		"noResults": "没有匹配的笔记",
+		"loadMore": "还有 {remaining, number} 条，加载更多",
 		"noResultsHint": "换个关键词试试。"
 	},
 	"Settings": {

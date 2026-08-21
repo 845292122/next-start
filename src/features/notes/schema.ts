@@ -33,4 +33,24 @@ export const noteIdSchema = z.object({
  */
 export const listNotesSchema = z.object({
 	query: z.string().max(200).optional(),
+	/**
+	 * How many rows to return. Bounded here *and* in the service — this stops a
+	 * nonsense value at the edge, and `notes-service.ts` re-clamps because it must
+	 * be safe for every caller, not just this one.
+	 */
+	limit: z.number().int().positive().max(100).optional(),
+	offset: z.number().int().nonnegative().optional(),
+})
+
+/**
+ * `listNotesSchema` for a Route Handler, where every value arrives as a string.
+ *
+ * A separate schema rather than `z.coerce` on the shared one: the Server Action
+ * receives real numbers from typed client code, and coercing there would quietly
+ * accept `"20"` and `true` as valid input. The coercion belongs only at the
+ * boundary that actually has strings.
+ */
+export const listNotesQuerySchema = listNotesSchema.extend({
+	limit: z.coerce.number().int().positive().max(100).optional(),
+	offset: z.coerce.number().int().nonnegative().optional(),
 })
