@@ -46,6 +46,26 @@ test('search matches regardless of case', async ({ page }) => {
 	await expect(page.getByText('没有匹配的笔记')).toBeVisible()
 })
 
+test('a new note shows up while a search filter is active', async ({
+	page,
+}) => {
+	// Regression guard. NoteForm used to revalidate `notesKey()` — the key for the
+	// *empty* query — so creating a note with text in the search box left the
+	// visible, filtered list stale until something else refetched it. The fix is
+	// revalidating by key filter instead; see features/notes/swr-keys.ts.
+	const tag = `FilterCheck-${test.info().testId}`
+	await page.goto('/notes')
+
+	await page.getByRole('searchbox').fill(tag)
+	await expect(page.getByText('没有匹配的笔记')).toBeVisible()
+
+	// The search box stays filled while this is submitted.
+	await page.getByLabel('标题').fill(`${tag} 新建的`)
+	await page.getByRole('button', { name: '添加' }).click()
+
+	await expect(page.getByText(`${tag} 新建的`, { exact: true })).toBeVisible()
+})
+
 test('toggles and deletes a note', async ({ page }) => {
 	const title = uniqueTitle('E2E 切换')
 	await page.goto('/notes')

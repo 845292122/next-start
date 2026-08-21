@@ -5,8 +5,18 @@ import { toNoteDTO } from '@/features/notes/dto'
 import { createNoteSchema } from '@/features/notes/schema'
 
 /**
- * Route handlers don't run layouts, so the (app) group's auth guard doesn't
- * apply here — each handler establishes its own session.
+ * The worked example of the **external-consumer** path: third-party callers,
+ * mobile clients, webhooks (see AGENTS.md). Nothing inside this app calls these —
+ * `NoteList` reads and mutates through the Server Actions in
+ * `features/notes/actions.ts`, because needing to fetch from the client was never
+ * a reason to add a Route Handler.
+ *
+ * They're kept, and covered by `e2e/api-errors.e2e.ts`, because "how do I expose
+ * something to a caller outside this app" is a real question a template should
+ * answer.
+ *
+ * Route handlers don't run layouts, so the (app) group's auth guard doesn't apply
+ * here — each handler establishes its own session.
  *
  * `getRequiredSession()` throws `UnauthorizedError` and `withHandler` turns that
  * into a 401, which is why there's no `if (!session) return 401` in sight. Same

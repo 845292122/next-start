@@ -21,18 +21,17 @@ import {
 	type CreateNoteValues,
 	createNoteSchema,
 } from '@/features/notes/schema'
-import { notesKey } from '@/features/notes/swr-keys'
+import { notesKeyFilter } from '@/features/notes/swr-keys'
+import { useActionErrorMessage } from '@/lib/action-error'
 
 /**
- * Exposure path A: a Server Action.
- *
- * The action revalidates the page on the server, but NoteList reads from SWR, so
- * the new row also has to be pushed into that cache — mutate() below. Doing only
- * one of the two leaves either a stale list or a stale server render.
+ * The reference implementation for consuming `ActionResult` in a form: a failure
+ * that names fields lands on those fields, and everything else becomes a toast.
  */
 export function NoteForm() {
 	const t = useTranslations('Notes')
 	const { mutate } = useSWRConfig()
+	const errorMessage = useActionErrorMessage()
 
 	// Three generics, not one: `body` has a zod .default(''), so the schema's
 	// input type (body optional) and output type (body always a string) differ,
@@ -41,6 +40,7 @@ export function NoteForm() {
 		register,
 		handleSubmit,
 		reset,
+		setError,
 		formState: { errors, isSubmitting },
 	} = useForm<CreateNoteValues, unknown, CreateNoteInput>({
 		resolver: zodResolver(createNoteSchema),
@@ -61,16 +61,33 @@ export function NoteForm() {
 		}
 
 		if (!result.ok) {
-			// TODO(批次 2): map result.code / result.fields onto translated,
-			// field-level messages via setError() instead of one generic toast.
-			toast.danger(t('createFailed'))
+			// A failure carrying field names belongs on those fields, not in a toast
+			// — `fields` exists precisely so the server can say *where* without
+			// sending untranslatable text (see core/action-result.ts).
+			//
+			// Reaching this in practice means the request was tampered with or the
+			// schema drifted, because the same schema already ran client-side through
+			// zodResolver. It's the defence-in-depth path, not the everyday one.
+			if (result.fields?.length) {
+				for (const field of result.fields) {
+					if (field === 'title' || field === 'body') {
+						setError(field, { message: t(`${field}Invalid`) })
+					}
+				}
+				return
+			}
+
+			toast.danger(errorMessage(result))
 			return
 		}
 
 		// Revalidate rather than write `result.data` in by hand: the list is sorted
 		// by createdAt and filtered by the search box, so the server is the only
 		// thing that knows where the new note belongs.
-		await mutate(notesKey())
+		//
+		// The *filter*, not notesKey() — a note has to appear in whatever query the
+		// search box currently holds, and that's a different cache key.
+		await mutate(notesKeyFilter)
 		reset()
 		toast.success(t('created'))
 	})
@@ -80,7 +97,14 @@ export function NoteForm() {
 			<TextField isInvalid={!!errors.title}>
 				<Label>{t('titleLabel')}</Label>
 				<Input placeholder={t('titlePlaceholder')} {...register('title')} />
-				<FieldError>{errors.title?.message}</FieldError>
+				{/*
+				 * t('titleInvalid'), not errors.title?.message: the message on a
+				 * resolver error is zod's own English string, and schemas in this
+				 * project deliberately carry no locale-specific text (see
+				 * core/auth/schema.ts). Keying off *which* field failed is the same
+				 * approach LoginForm takes.
+				 */}
+				<FieldError>{errors.title && t('titleInvalid')}</FieldError>
 			</TextField>
 
 			<TextField isInvalid={!!errors.body}>
@@ -90,7 +114,7 @@ export function NoteForm() {
 					placeholder={t('bodyPlaceholder')}
 					{...register('body')}
 				/>
-				<FieldError>{errors.body?.message}</FieldError>
+				<FieldError>{errors.body && t('bodyInvalid')}</FieldError>
 			</TextField>
 
 			<Button type="submit" isPending={isSubmitting} className="self-start">

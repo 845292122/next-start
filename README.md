@@ -3,7 +3,8 @@
 一个全栈 Next.js 项目模板：App Router + HeroUI + Drizzle/SQLite + Auth.js + next-intl，包管理和运行时用 Bun。
 
 开箱即用的部分：中英双语路由、明暗主题、手机号+验证码登录（带路由守卫）、一条完整的
-「建表 → service → 接口 → 界面」示例（`/notes`），以及 lint / typecheck / 单测 / 组件测试 / E2E 五条流水线。
+「建表 → service → Server Action → 界面」示例（`/notes`），一套 Server Action 和 Route Handler
+共用的错误契约（含错误边界），以及 lint / typecheck / 单测 / 组件测试 / E2E 五条流水线。
 
 > **动手前先读 [DEVELOPMENT.md](DEVELOPMENT.md)** —— 分层规则、命名约定和一堆踩过的坑都在那里。
 > 另外看一眼 [AGENTS.md](AGENTS.md)：这个仓库用的 Next.js 版本有 breaking changes。

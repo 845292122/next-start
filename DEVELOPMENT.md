@@ -58,8 +58,11 @@
 src/app/
 ├── [locale]/           # 所有渲染 HTML 的路由都在这一段下
 │   ├── layout.tsx      # 根布局（没有 src/app/layout.tsx）
+│   ├── error.tsx       # (app) 之外的错误边界（登录页、404 兜底……）
 │   ├── (app)/          # 已登录区：带左侧导航栏（rail），layout 里有登录拦截
 │   │   ├── layout.tsx  # 校验 session + 套一层 <AppShell>
+│   │   ├── error.tsx   # 错误边界，渲染在 rail 里面
+│   │   ├── loading.tsx # Suspense fallback，同样在 rail 里面
 │   │   ├── page.tsx    # 即 "/"，307 跳到 /dashboard
 │   │   ├── dashboard/  # 设计系统的活文档页
 │   │   ├── notes/      # 完整业务示例
@@ -71,7 +74,8 @@ src/app/
 │   └── [...rest]/      # 未匹配 URL 的兜底，只调 notFound()
 ├── api/                # Route Handlers —— 注意在 [locale] 之外
 │   ├── auth/[...nextauth]/
-│   └── notes/
+│   └── notes/          # 外部消费者路径的示例，应用自己不调
+├── global-error.tsx    # 根布局自己炸掉时的最后兜底，零 import
 ├── favicon.ico
 └── globals.css         # 唯一的样式入口
 ```
@@ -91,6 +95,11 @@ src/app/
 - **`[...rest]/page.tsx` 不能删。** 没有它，未匹配的路径会去找（不存在的）根 `not-found`，
   渲染出 Next 内置的 404 而不是我们自己的页面。
 - **`not-found.tsx` 故意不套 `AppShell`。** 套了就要有 session，而 404 对未登录访客也得能渲染。
+- **三个错误边界是三个不同的位置，不是重复。** `error.tsx` 永远不包住**自己那一段的
+  layout**，所以：`(app)/error.tsx` 渲染在 `AppShell` 里面（rail 还在，用户能导航走）；
+  `[locale]/error.tsx` 接住 (app) 之外的页面，以及 `(app)/layout.tsx` 自己抛的错；
+  `global-error.tsx` 接住 `[locale]/layout.tsx` 自己抛的错，此时连 `<html>` 都得它自己渲染。
+  详见[错误处理](#错误处理)。
 - Route Handler 里**每个 handler 自己校验会话**——`(app)/layout.tsx` 的守卫管不到它们，
   见[认证](#认证)。
 - **Route Handler 默认只写给 Next.js 应用之外的消费者**（第三方调用方、移动端、webhook、或框架
@@ -103,7 +112,7 @@ src/app/
 src/components/
 ├── layout/     # 应用外壳：AppShell.tsx + NavLinks.ts
 ├── providers/  # 全局 Provider（AppProviders.tsx）
-└── ui/         # 通用小部件：BlackHoleMark / LoginHero / color-mode / locale-switch / sign-out-button
+└── ui/         # 通用小部件：BlackHoleMark / ErrorState / LoginHero / color-mode / locale-switch / sign-out-button
 ```
 
 规则：**这里不写业务逻辑，也不碰数据库。** 只依赖 props、HeroUI 和 session。要用到某个业务域的
@@ -129,10 +138,9 @@ src/features/auth/
 └── components/LoginForm.tsx   # 登录表单（+ 同目录的组件测试）
 ```
 
-`notes` 是模板自带的**完整**示例：从建表一路到界面，两条暴露路径都用上了（`NoteList` 的
-SWR + Route Handler 那条现在算历史示例，只是用来展示这条路径长什么样——新业务默认只要
-Server Action，见下面暴露方式优先级）。不需要就整个删掉，删除清单见
-[README](README.md#拿它开新项目)。
+`notes` 是模板自带的**完整**示例：从建表一路到界面，全部走 Server Action——包括
+`NoteList` 的输入即搜和乐观更新（`listNotesAction` 当 SWR 的 fetcher）。不需要就整个删掉，
+删除清单见 [README](README.md#拿它开新项目)。
 
 ### `src/core/` — 服务端能力，唯一允许碰 IO 的地方
 
@@ -187,7 +195,7 @@ src/core/
 | `drizzle.config.ts` | drizzle-kit 的配置：dialect、schema 路径、输出目录、连接串 |
 | `src/i18n/` | next-intl 的配置与文案，见[国际化](#国际化) |
 | `src/proxy.ts` | Next 16 的中间件（旧名 `middleware.ts`）。**只做 locale 解析与重定向，不管登录态** |
-| `src/lib/` | 前后端都能用的无状态工具：目前只有 `fetcher.ts`（SWR 用） |
+| `src/lib/` | 不属于某个业务域的通用工具：目前只有 `action-error.ts`（把 `ActionResult` 的 `code` 翻成文案，见[错误处理](#错误处理)） |
 | `src/types/messages.d.ts` | 把 `zh.json` 的形状喂给 next-intl 的 `AppConfig`，让 `t('key')` 受类型检查 |
 | `e2e/` | Playwright 用例，文件名必须是 `*.e2e.ts`；`auth.setup.ts` 是登录态的来源 |
 | `test/setup.ts` | happy-dom + jest-dom 注册。**只由 `test:dom` 脚本 `--preload`**，见[测试](#测试) |
@@ -228,12 +236,14 @@ src/app/ (路由、页面)
      直接当 SWR 的 fetcher 用。需要输入即搜、乐观更新，不代表就必须写 Route Handler。
    - **Route Handler 只留给 Next.js 应用之外的消费者**：第三方调用方、移动端、webhook 接收端，
      或框架强制要求的回调（如 `api/auth/[...nextauth]`）。"页面里想在客户端调一下"不算理由。
-   - `notes` 域的 `NoteList` 走 `/api/notes` 做搜索和乐观更新，是模板早期留下的示例，展示的是
-     "SWR + Route Handler" 这条路径长什么样，**不是新业务该照抄的默认写法**。
+   - **应用内部没有第二条路径。** `notes` 域的 `NoteList` 就是证明：它做输入即搜和乐观更新，
+     全部走 Server Action——`listNotesAction` 直接当 SWR 的 fetcher 用。
+     `src/app/api/notes/` 保留着，但那是**外部消费者路径的示例**，应用自己一行都不调它。
 
 不管走哪条，只要数据跨了服务端/客户端边界（Server Action 的返回值，或 Route Handler 的
-`Response.json()`），都要过一遍 DTO，见 [DTO 为什么必需](#dto-为什么必需)；如果用了
-Route Handler，SWR 的 key 统一放 `src/features/<域>/swr-keys.ts`，别在组件里拼字符串。
+`Response.json()`），都要过一遍 DTO，见 [DTO 为什么必需](#dto-为什么必需)。SWR 的 key 统一放
+`src/features/<域>/swr-keys.ts`，别在组件里拼字符串——**即使 key 已经不是 URL 了**，它现在是
+`['notes', query]` 这样的元组。
 
 ### DTO 为什么必需
 
@@ -434,12 +444,78 @@ unstable_rethrow(error)
 造成的失败是 `warn` 且不打堆栈，只有真正的故障是 `error`。**把校验失败打成 error 级别，
 是让错误日志失去价值的最快方式。**
 
-### 还缺的部分
+### 客户端怎么消费这个契约
 
-页面级的错误边界还没有——`src/app/` 下目前只有 `[locale]/not-found.tsx`，没有
-`error.tsx` 也没有 `global-error.tsx`，所以 Server Component 里抛出的错误在生产环境仍然
-是 Next 的默认错误页。客户端怎么把 `code` / `fields` 变成翻译好的、字段级的提示同样还没做
-（`NoteForm` 里现在是一个 `TODO` 加一个通用 toast）。见[已知遗留与缺口](#已知遗留与缺口)。
+`code` 到文案的映射是 UI 的事，而且必须按语言走，所以它在客户端：
+[src/lib/action-error.ts](src/lib/action-error.ts) 的 `useActionErrorMessage()` 把一个
+`ActionFailure` 变成一句翻译好的话，文案在 `Errors.code.*`。
+
+那张 `Record<AppErrorCode, ...>` 是**故意写全**的，没用 `t(\`code.${code}\`)`：写全了，
+往 `core/errors.ts` 加一个 code 却忘了加文案，`bun run typecheck` 会在那里挂掉；用模板字符串
+的话只会在运行时静默渲染出 key 名。
+
+[NoteForm](src/features/notes/components/NoteForm.tsx) 是参考实现，规则是**带字段名的失败
+落到字段上，其余进 toast**：
+
+```tsx
+if (!result.ok) {
+  if (result.fields?.length) {
+    for (const field of result.fields) {
+      if (field === 'title' || field === 'body') {
+        setError(field, { message: t(`${field}Invalid`) })
+      }
+    }
+    return
+  }
+  toast.danger(errorMessage(result))
+  return
+}
+```
+
+两点值得说明：
+
+- **服务端的 `VALIDATION` 是纵深防御，不是日常路径。** 同一份 schema 已经在客户端由
+  `zodResolver` 跑过了，所以走到这里意味着请求被改过或者 schema 漂移了。
+- **字段文案是 `t('titleInvalid')`，不是 `errors.title?.message`。** 后者是 zod 自带的英文串。
+  按"哪个字段错了"取文案，和 `LoginForm` 一致。
+
+### 三个错误边界
+
+| 文件 | 接住什么 | 渲染在哪 |
+| --- | --- | --- |
+| `app/[locale]/(app)/error.tsx` | (app) 组里页面抛的错 | `AppShell` **里面**——rail 还在，用户能导航走 |
+| `app/[locale]/error.tsx` | (app) 之外的页面，**以及 `(app)/layout.tsx` 自己抛的错** | 整个 `<body>` 内 |
+| `app/global-error.tsx` | `[locale]/layout.tsx` 自己抛的错 | 它自己的 `<html>` / `<body>` |
+
+规则来自 Next：**`error.tsx` 不包住自己那一段的 layout**，所以每往上一层就少一层可用的东西。
+
+- **签名是 `{ error, retry }`。** Next 16 改的名，`retry` 从 16.3 起稳定。`retry()` 会重新
+  取数据并重渲染边界的 children；老的 `reset()` 只清错误状态，不重新取。
+- **`[locale]/error.tsx` 和 `(app)/error.tsx` 里 `useTranslations` 是可用的**——它们都在
+  `[locale]/layout.tsx` 的 `NextIntlClientProvider` 之内。可见部分共用
+  [ErrorState](src/components/ui/ErrorState.tsx)，两个文件的差别只是它渲染在哪。
+- **`global-error.tsx` 什么都 import 不了，这是刻意的。** 它替换掉根布局，所以：得自己渲染
+  `<html>`/`<body>`；不能 `export metadata`（错误边界是 Client Component，用 React 的
+  `<title>` 代替）；**拿不到全局样式**，因为 next-themes 的脚本和它写的 `class="light|dark"`
+  都属于刚刚炸掉的那个 layout。更重要的是，这是应用坏掉时唯一还要工作的页面——每一个
+  import 都是它跟着一起坏掉的途径，所以它用内联 `<style>` 和硬编码文案，一个 import 都没有。
+  文案是中英双语硬编码的：翻译在 `NextIntlClientProvider` 后面，而那个 provider 已经没了。
+- **`digest` 值得露出来。** 生产环境下真实消息只在服务端日志里，客户端只有这个 hash——它是
+  用户能拿来报障的唯一线索。
+
+### `loading.tsx` 带来的一条无害日志
+
+`app/[locale]/(app)/loading.tsx` 给这一组加了 Suspense 边界，于是这些页面变成**流式响应**。
+代价是：客户端在响应还没发完时就离开（语言切换是 `window.location.assign()` 的硬跳转，
+最容易触发），服务端会打一条
+
+```
+⨯ Error: The destination stream closed early.
+```
+
+**这是无害的**——它说的是客户端主动断开了，不是渲染失败。加 `loading.tsx` 之前
+（`bun run test:e2e` 跑 30 个用例）一次都不出现，之后偶发出现一到两次，取决于时序。
+知道它是什么就行，别去追。
 
 ## UI 与主题
 
@@ -918,6 +994,10 @@ input / output 两个类型都导出（见 [TypeScript](#typescript)）。
 乐观更新——只要消费者是这个 Next.js 应用自己，都走这条。完整写法和三个细节见
 [错误处理](#错误处理)。
 
+要在客户端做输入即搜或乐观更新，**读也走 Server Action**：把 `listTasksAction` 直接当 SWR 的
+fetcher，在 fetcher 里把 `ActionResult` 拆开（失败就 `throw`，这样 SWR 自己的错误处理和
+`rollbackOnError` 才有东西可用）。`NoteList` 是完整范例。
+
 只有真的要给应用之外的消费者用（第三方调用方、移动端、webhook 接收端）才另外写 Route Handler：
 `src/app/api/tasks/route.ts`，用 `withHandler` 包起来，body 走 `readJson`、动态段走
 `readParams`；key 加到 `src/features/tasks/swr-keys.ts`。
@@ -1013,39 +1093,55 @@ CI（`.github/workflows/ci.yml`）四个并行 job：`lint` / `typecheck` / `tes
 2. **没有任何限流。** `authorize()` 可以被无限次调用来爆破验证码；换成真 OTP 之后，发码接口
    被刷等于直接的短信账单。`core/errors.ts` 已经预留了 `RateLimitedError` / `RATE_LIMITED`
    （429），但还没有任何地方抛它，也还没有限流器。
-3. **页面级错误边界还没有。** `src/app/` 下只有 `[locale]/not-found.tsx`，没有 `error.tsx`、
-   没有 `global-error.tsx`、没有 `loading.tsx`。所以 Server Component 里抛出的错误在生产环境
-   仍然是 Next 的默认错误页（白底 "Application error"），没有 i18n 也没有品牌。
-   注意 Next 16 的签名是 `{ error, retry }`（`retry` 从 16.3 起稳定），不是老的 `reset`；
-   `global-error.tsx` 还必须自带 `<html>`/`<body>` 且**不会继承全局样式**。
-4. **客户端还没有消费错误契约。** 服务端已经给出 `code` / `fields`（见[错误处理](#错误处理)），
-   但 `NoteForm` 里仍然是一个 `TODO` 加一句通用 toast——还没把 `fields` 回填到
-   `react-hook-form` 的 `setError()`，也还没有按 `code` 分文案的 `Errors` namespace。
-5. **`src/core/storage/local-stub.ts` 只是占位**，写本地磁盘。真要用文件存储就照 `StorageAdapter`
+3. **错误边界没有常驻的自动化测试。** 渲染出来的部分由
+   [ErrorState.test.tsx](src/components/ui/ErrorState.test.tsx) 覆盖，但"边界有没有真的接上"
+   要靠一条故意抛错的路由，模板里不想常留这种东西。改完 `error.tsx` 之后照下面这样验一次
+   （两个 `error.tsx` 都是这么验过的）：
+
+   ```bash
+   # 1. 目录名不能以下划线开头——那是 Next 的 private folder 约定，整个目录不进路由
+   mkdir -p 'src/app/[locale]/boomprobe' 'src/app/[locale]/(app)/boomprobeapp'
+   for d in 'src/app/[locale]/boomprobe' 'src/app/[locale]/(app)/boomprobeapp'; do
+     echo 'export default async function Boom() { throw new Error("probe") }' > "$d/page.tsx"
+   done
+   # 2. 用 /en/ 前缀访问。顶层就是 [locale] 动态段，所以 /boomprobe 会被当成
+   #    locale="boomprobe"，被 layout 的 hasLocale() 判成 404；localePrefix 是
+   #    'as-needed'，只有非默认语言会保留前缀。
+   bun run dev   # 然后开 /en/boomprobe 和 /en/boomprobeapp
+   # 3. 验完删掉这两个目录
+   ```
+
+   要确认的四件事：错误 UI 出来了；`(app)` 那条**左侧 rail 还在**（嵌套边界的意义就在这）；
+   生产构建（`bun run build && bun run start`）下**真实的错误消息不出现在页面上**，只有
+   `digest`；点"重试"能重新渲染。
+
+   `global-error.tsx` 要触发得让 `[locale]/layout.tsx` 自己抛错，代价比较大，一般改完它
+   肉眼过一遍就行。
+4. **`src/core/storage/local-stub.ts` 只是占位**，写本地磁盘。真要用文件存储就照 `StorageAdapter`
    接口换成 S3/R2 实现。
-6. **403 页没有任何地方会跳转过去。** 登录拦截解决的是"未登录"（弹到 `/login`），而项目里还没有
+5. **403 页没有任何地方会跳转过去。** 登录拦截解决的是"未登录"（弹到 `/login`），而项目里还没有
    角色模型，所以没有"已登录但无权限"这种情况。加了角色判断之后，service 抛 `ForbiddenError`
    （`core/errors.ts` 里已经有了），让页面 `redirect('/403')`。
    > 另一条路是 Next 的 `forbidden()` / `unauthorized()` 加 `forbidden.tsx` /
    > `unauthorized.tsx`，能顺手填掉这个缺口。**本项目刻意没走这条**：它需要打开
    > `experimental.authInterrupts`，模板不想依赖实验性 API；而且它靠抛中断工作，会被
    > `runAction` / `withHandler` 的 try/catch 影响（要靠 `unstable_rethrow` 放行）。
-7. **`listNotes` 没有分页。** 一个 `select *` 全表返回。`notes` 是[标准流程](#新增业务的标准流程)
+6. **`listNotes` 没有分页。** 一个 `select *` 全表返回。`notes` 是[标准流程](#新增业务的标准流程)
    会被照抄的模板，所以这条会传染到真实业务表上。另外搜索用的
    `like(lower(title), '%q%')` 没有转义用户输入里的 `%` / `_`（搜 `%` 匹配全部），
    而 `lower()` 也让索引失效。
-8. **`notesTable` 只有 `createdAt`，没有 `updatedAt`**，也没有软删除。多数生产表需要前者
+7. **`notesTable` 只有 `createdAt`，没有 `updatedAt`**，也没有软删除。多数生产表需要前者
    （Drizzle 的 `$onUpdate`）。
-9. **一个 `db.transaction()` 示例都没有**，[标准流程](#新增业务的标准流程)里也没提。真实业务
+8. **一个 `db.transaction()` 示例都没有**，[标准流程](#新增业务的标准流程)里也没提。真实业务
    （下单、扣库存）少不了它。
-10. **登录页的微信按钮是禁用的占位。** 后端没有对应 provider，接法见
-    `src/core/auth/config.ts` 的 `providers`。
-11. **没有 `authenticator` 表。** `@auth/drizzle-adapter` 的 WebAuthn 方法会去查它，
+9. **登录页的微信按钮是禁用的占位。** 后端没有对应 provider，接法见
+   `src/core/auth/config.ts` 的 `providers`。
+10. **没有 `authenticator` 表。** `@auth/drizzle-adapter` 的 WebAuthn 方法会去查它，
     表不存在时那些方法运行时会炸。本模板不用 WebAuthn，所以没建；要用的话往
     `src/core/db/schema.ts` 里补一个，并把它传给 `DrizzleAdapter`。
-12. **英文文案是从中文翻译来的占位内容**，dashboard 和登录页左侧插画那些都是展示用的样例文字，
+11. **英文文案是从中文翻译来的占位内容**，dashboard 和登录页左侧插画那些都是展示用的样例文字，
     不是真实业务文案。
-13. **`/dashboard` 和 `/notes` 都是给你删的。** 前者是设计系统活文档，后者是业务示例。
+12. **`/dashboard` 和 `/notes` 都是给你删的。** 前者是设计系统活文档，后者是业务示例。
 
 ### 主动放弃的东西（不是缺口）
 

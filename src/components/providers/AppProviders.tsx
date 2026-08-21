@@ -5,9 +5,7 @@ import type { Session } from 'next-auth'
 import { SessionProvider } from 'next-auth/react'
 import { useLocale } from 'next-intl'
 import { ThemeProvider } from 'next-themes'
-import { SWRConfig } from 'swr'
 import { useRouter } from '@/i18n/navigation'
-import { fetcher } from '@/lib/fetcher'
 
 /**
  * Every client-side provider the app needs, in one place. HeroUI v3 has no
@@ -49,11 +47,17 @@ export function AppProviders({
 					 * every click is a full page load. next-intl's router is used rather
 					 * than Next's so the locale prefix is applied.
 					 */}
+					{/*
+					 * No SWRConfig: it existed only to install a global URL fetcher, and
+					 * nothing fetches by URL any more — SWR consumers pass a Server Action
+					 * as their fetcher (see features/notes/components/NoteList.tsx). A
+					 * global URL fetcher left in place would quietly sanction
+					 * `useSWR('/api/...')`, which is the path this template steered away
+					 * from. Add SWRConfig back if you need genuinely global SWR options.
+					 */}
 					<RouterProvider navigate={(href) => router.push(href)}>
-						<SWRConfig value={{ fetcher }}>
-							<Toast.Provider placement="bottom end" />
-							{children}
-						</SWRConfig>
+						<Toast.Provider placement="bottom end" />
+						{children}
 					</RouterProvider>
 				</I18nProvider>
 			</ThemeProvider>

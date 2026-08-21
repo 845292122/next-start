@@ -99,13 +99,15 @@
 	},
 	"Notes": {
 		"title": "Notes",
-		"description": "The template's one complete example: SQLite table → drizzle service → both exposure paths (Server Action and route handler) → HeroUI UI. Delete the whole domain if you don't need it.",
+		"description": "The template's one complete example: SQLite table → drizzle service → Server Actions (search and optimistic updates included) → HeroUI UI. Delete the whole domain if you don't need it.",
 		"titleLabel": "Title",
 		"titlePlaceholder": "What do you want to remember?",
 		"bodyLabel": "Body",
 		"bodyPlaceholder": "Optional",
 		"submit": "Add",
 		"created": "Note added",
+		"titleInvalid": "A title is required, up to 200 characters",
+		"bodyInvalid": "The body can be at most 5000 characters",
 		"createFailed": "Could not add the note",
 		"updateFailed": "Could not update the note",
 		"deleteFailed": "Could not delete the note",
@@ -174,6 +176,19 @@
 	"Errors": {
 		"forbidden": "Your account doesn't have access to this page. Ask an administrator if you need it.",
 		"notFound": "There's no page at this address. Check the link, or start over from the home page.",
-		"backHome": "Back to home"
+		"backHome": "Back to home",
+		"title": "This page didn't load",
+		"description": "Something went wrong while rendering it. Trying again usually works; if it keeps happening, send us the error id below.",
+		"retry": "Try again",
+		"digest": "Error id {digest}",
+		"code": {
+			"VALIDATION": "Some of the details aren't valid. Check them and try again.",
+			"UNAUTHORIZED": "Your session has expired. Please sign in again.",
+			"FORBIDDEN": "You don't have permission to do that.",
+			"NOT_FOUND": "That item no longer exists — it may have been deleted.",
+			"CONFLICT": "That conflicts with existing data. Try a different value.",
+			"RATE_LIMITED": "Too many attempts. Please wait a moment and try again.",
+			"INTERNAL": "Something went wrong on our side. Please try again shortly."
+		}
 	}
 }

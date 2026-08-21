@@ -12,39 +12,62 @@ import { NotebookPen, Trash2 } from 'lucide-react'
 import { useFormatter, useTranslations } from 'next-intl'
 import { useState } from 'react'
 import useSWR from 'swr'
+import {
+	deleteNoteAction,
+	listNotesAction,
+	toggleNoteAction,
+} from '@/features/notes/actions'
 import type { NoteDTO } from '@/features/notes/dto'
 import { notesKey } from '@/features/notes/swr-keys'
+import { useActionErrorMessage } from '@/lib/action-error'
 
 /**
- * Exposure path B: SWR against the route handlers in app/api/notes/.
+ * Search-as-you-type and optimistic updates, all on Server Actions.
  *
- * This is the path for anything that needs search-as-you-type or optimistic
- * updates; the plain server-render + Server Action path is NoteForm's.
+ * There used to be a second exposure path here — SWR against the route handlers
+ * in `app/api/notes/`. It's gone: a Server Action works fine as an SWR fetcher,
+ * so "the client needs to trigger this fetch" was never a reason to add a Route
+ * Handler (see AGENTS.md). Those handlers remain as the worked example of the
+ * external-consumer path, but nothing in this app calls them.
  */
 export function NoteList({ initial }: { initial: NoteDTO[] }) {
 	const t = useTranslations('Notes')
 	const format = useFormatter()
+	const errorMessage = useActionErrorMessage()
 	const [query, setQuery] = useState('')
 
 	const {
 		data: notes,
 		isLoading,
 		mutate,
-	} = useSWR<NoteDTO[]>(notesKey(query), {
-		// The unfiltered list was already server-rendered by the page, so the first
-		// paint needs no request. A search narrows the key, which legitimately
-		// misses the cache and fetches.
-		fallbackData: query ? undefined : initial,
-		keepPreviousData: true,
-	})
+	} = useSWR(
+		notesKey(query),
+		// An explicit fetcher, because the key is a tuple rather than a URL. The
+		// ActionResult is unwrapped here so that everything below this line deals in
+		// plain data: a failure becomes a thrown error, which is what SWR's own
+		// error/rollback handling is built around.
+		async ([, q]) => {
+			const result = await listNotesAction({ query: q || undefined })
+			if (!result.ok) throw new Error(errorMessage(result))
+			return result.data
+		},
+		{
+			// The unfiltered list was already server-rendered by the page, so the
+			// first paint needs no request. A search narrows the key, which
+			// legitimately misses the cache and fetches.
+			fallbackData: query ? undefined : initial,
+			keepPreviousData: true,
+			onError: (error: Error) => toast.danger(error.message),
+		},
+	)
 
 	async function toggle(note: NoteDTO) {
 		// Optimistic: flip locally, then let the response confirm. `revalidate`
-		// stays on so a failed PATCH rolls the row back.
+		// stays on so a failed toggle rolls the row back.
 		await mutate(
 			async () => {
-				const res = await fetch(`/api/notes/${note.id}`, { method: 'PATCH' })
-				if (!res.ok) throw new Error('toggle failed')
+				const result = await toggleNoteAction({ id: note.id })
+				if (!result.ok) throw new Error(errorMessage(result))
 				return undefined
 			},
 			{
@@ -53,14 +76,14 @@ export function NoteList({ initial }: { initial: NoteDTO[] }) {
 				rollbackOnError: true,
 				populateCache: false,
 			},
-		).catch(() => toast.danger(t('updateFailed')))
+		).catch((error: Error) => toast.danger(error.message))
 	}
 
 	async function remove(note: NoteDTO) {
 		await mutate(
 			async () => {
-				const res = await fetch(`/api/notes/${note.id}`, { method: 'DELETE' })
-				if (!res.ok) throw new Error('delete failed')
+				const result = await deleteNoteAction({ id: note.id })
+				if (!result.ok) throw new Error(errorMessage(result))
 				return undefined
 			},
 			{
@@ -69,7 +92,7 @@ export function NoteList({ initial }: { initial: NoteDTO[] }) {
 				rollbackOnError: true,
 				populateCache: false,
 			},
-		).catch(() => toast.danger(t('deleteFailed')))
+		).catch((error: Error) => toast.danger(error.message))
 	}
 
 	return (

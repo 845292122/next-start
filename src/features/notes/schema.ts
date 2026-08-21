@@ -11,13 +11,25 @@ export type CreateNoteInput = z.output<typeof createNoteSchema>
 export type CreateNoteValues = z.input<typeof createNoteSchema>
 
 /**
- * The `[id]` segment of `/api/notes/[id]`.
+ * A note id on its own.
  *
- * Route params are arbitrary strings — whatever the caller put in the URL. Ids
- * are `crypto.randomUUID()` (see `core/db/schema.ts`), so anything that isn't a
- * uuid can be rejected as a 400 before it reaches the database instead of coming
- * back as an empty result that then has to be guessed at.
+ * Shared by the toggle/delete Server Actions and by the `[id]` segment of
+ * `/api/notes/[id]` — one schema so the two paths can't drift. Ids are
+ * `crypto.randomUUID()` (see `core/db/schema.ts`), so anything that isn't a uuid
+ * is rejected before it reaches the database rather than coming back as an empty
+ * result that then has to be guessed at. Route params in particular are arbitrary
+ * strings: whatever the caller typed into the URL.
  */
-export const noteParamsSchema = z.object({
+export const noteIdSchema = z.object({
 	id: z.uuid(),
+})
+
+/**
+ * Input for the list action. `query` is the search box's value.
+ *
+ * Bounded rather than a bare `string`: it reaches a `LIKE` pattern, and an
+ * unbounded one is a free way to make the database do work.
+ */
+export const listNotesSchema = z.object({
+	query: z.string().max(200).optional(),
 })

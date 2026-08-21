@@ -102,13 +102,15 @@ declare const messages: {
 	},
 	"Notes": {
 		"title": "笔记",
-		"description": "模板自带的完整示例：SQLite 表 → drizzle service → Server Action 与 Route Handler 两条暴露路径 → HeroUI 界面。不需要的话整个域可以删掉。",
+		"description": "模板自带的完整示例：SQLite 表 → drizzle service → Server Action（连搜索和乐观更新也是）→ HeroUI 界面。不需要的话整个域可以删掉。",
 		"titleLabel": "标题",
 		"titlePlaceholder": "想记点什么？",
 		"bodyLabel": "内容",
 		"bodyPlaceholder": "可留空",
 		"submit": "添加",
 		"created": "已添加",
+		"titleInvalid": "标题必填，最多 200 个字符",
+		"bodyInvalid": "内容最多 5000 个字符",
 		"createFailed": "添加失败",
 		"updateFailed": "更新失败",
 		"deleteFailed": "删除失败",
@@ -177,7 +179,20 @@ declare const messages: {
 	"Errors": {
 		"forbidden": "你的账号没有这个页面的访问权限。需要的话找管理员开通。",
 		"notFound": "这个地址没有对应的页面。检查一下链接，或者回到首页重新开始。",
-		"backHome": "回到首页"
+		"backHome": "回到首页",
+		"title": "这个页面没能加载出来",
+		"description": "渲染时出了点问题。重试一次通常就好了；如果一直这样，把下面的错误编号发给我们。",
+		"retry": "重试",
+		"digest": "错误编号 {digest}",
+		"code": {
+			"VALIDATION": "填写的内容不符合要求，检查一下再提交。",
+			"UNAUTHORIZED": "登录状态已经失效，请重新登录。",
+			"FORBIDDEN": "你没有做这个操作的权限。",
+			"NOT_FOUND": "要操作的内容不存在，可能已经被删掉了。",
+			"CONFLICT": "和已有的数据冲突，换一个值试试。",
+			"RATE_LIMITED": "操作太频繁了，过一会儿再试。",
+			"INTERNAL": "服务器出了点问题，稍后重试。"
+		}
 	}
 };
 export default messages;

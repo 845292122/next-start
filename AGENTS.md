@@ -27,5 +27,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
   input, never a hand-written `if (!session) return 401`. If you write your own try/catch
   wrapper, `unstable_rethrow(error)` must be its first statement or `redirect()` and
   `notFound()` break silently.
-- Full rationale and the one documented exception (`notes`' `NoteList`, a legacy demo of the
-  SWR + Route Handler path) are in [DEVELOPMENT.md § 分层与依赖方向](DEVELOPMENT.md#分层与依赖方向).
+- There is **no exception** to the rule above. `notes`' `NoteList` does search-as-you-type and
+  optimistic updates entirely through Server Actions (`listNotesAction` is its SWR fetcher);
+  `src/app/api/notes/` is kept only as the worked example of the external-consumer path and
+  nothing in the app calls it. Full rationale in
+  [DEVELOPMENT.md § 分层与依赖方向](DEVELOPMENT.md#分层与依赖方向).
