@@ -1,9 +1,12 @@
 import { beforeAll, describe, expect, test } from 'bun:test'
 
-// Order matters: core/db/client.ts opens the database at module scope, so a
-// static `import` would be hoisted above this line and the suite would run
-// against the dev database. Everything below is a dynamic import for that
-// reason.
+// `:memory:` is set for the whole unit run by test/unit-setup.ts (--preload),
+// which is the only place it can be set reliably — see the comment there. This
+// line is belt-and-braces so that running *this file alone* without the preload
+// still can't touch the dev database.
+//
+// Dynamic imports below, not static ones: a static import is hoisted above this
+// line, so on the run-this-file-alone path the fallback would come too late.
 process.env.DATABASE_URL = ':memory:'
 
 const { db } = await import('@/core/db/client')

@@ -17,7 +17,7 @@
 		"db:seed": "bun run src/core/db/seed.ts",
 		"db:studio": "drizzle-kit studio",
 		"test": "bun run test:unit && bun run test:dom",
-		"test:unit": "bun test --env-file=.env.local src/core",
+		"test:unit": "bun test --env-file=.env.local --preload ./test/unit-setup.ts src/core",
 		"test:dom": "bun test --preload ./test/setup.ts src/components src/features",
 		"test:e2e": "playwright test",
 		"commit": "czg"
