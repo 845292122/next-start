@@ -6,7 +6,9 @@
 「建表 → service → Server Action → 界面」示例（`/notes`，含分页、事务和 LIKE 转义），一套 Server Action 和 Route Handler
 共用的错误契约（含错误边界），请求 id 贯穿的结构化日志（带脱敏）+ `/api/health`，
 一套实测过不误伤应用的安全响应头（nonce CSP / HSTS / …）和登录限流，
-以及 lint / typecheck / 单测 / 组件测试 / E2E 五条流水线。
+canonical / hreflang / robots / sitemap，一个单实例的生产 `Dockerfile`，
+以及 lint / typecheck / 单测（带覆盖率阈值）/ 组件测试 / E2E（含 axe 无障碍扫描）五条流水线
+＋ Git 钩子和 Renovate 分组策略。
 
 > **动手前先读 [DEVELOPMENT.md](DEVELOPMENT.md)** —— 分层规则、命名约定和一堆踩过的坑都在那里。
 > 另外看一眼 [AGENTS.md](AGENTS.md)：这个仓库用的 Next.js 版本有 breaking changes。
@@ -56,6 +58,7 @@ bun run dev
 | `bun run lint:fix` | 修 lint + 格式化 + 排 import |
 | `bun run typecheck` | `next typegen && tsc --noEmit` |
 | `bun run test` | 单测 + 组件测试 |
+| `bun run test:coverage` | 单测 + 覆盖率（阈值只在这里强制） |
 | `bun run test:e2e` | Playwright（用 `./data/e2e.db`，不碰开发库） |
 | `bun run db:generate` | 改完 `src/core/db/schema.ts` 后生成迁移 SQL |
 | `bun run db:migrate` | 应用迁移 |

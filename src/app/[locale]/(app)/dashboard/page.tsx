@@ -314,7 +314,13 @@ export default function Dashboard() {
 								</Slider.Track>
 							</Slider>
 
-							<ProgressBar value={72}>
+							{/*
+							 * aria-label as well as the visible <p>: a paragraph is not a
+							 * label element, so nothing associates it with the progressbar and
+							 * a screen reader announces an unnamed one. Caught by
+							 * e2e/a11y.e2e.ts (aria-progressbar-name).
+							 */}
+							<ProgressBar value={72} aria-label={t('controls.buildProgress')}>
 								<p className="mb-2 text-sm">{t('controls.buildProgress')}</p>
 								<ProgressBar.Track>
 									<ProgressBar.Fill />

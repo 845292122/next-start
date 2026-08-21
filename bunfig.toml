@@ -1,0 +1,31 @@
+[test]
+# Coverage is only measured when `--coverage` is passed (`bun run test:coverage`),
+# so the threshold below does not gate `test:unit` or `test:dom`. Verified.
+#
+# ⚠️ Bun enforces the threshold **per file**, not on the aggregate. That is the
+# whole reason the ignore list exists: without it the gate has to be lowered until
+# the *worst* file passes, and the worst files here have gaps that are correct.
+# Measured: the suite sits at ~98% functions / ~98% lines overall, yet a global
+# 0.90 fails, and it only goes green at 0.70/0.60 — a number that prevents nothing.
+coverageThreshold = { lines = 0.90, functions = 0.90 }
+
+coveragePathIgnorePatterns = [
+	# The `import.meta.main` self-run block, which exists precisely so importing
+	# this from a test does *not* run it. Covering it would mean testing the thing
+	# the guard is there to prevent.
+	"src/core/db/migrate.ts",
+	# Only reachable in a Node process with no Bun and no sources (the Docker
+	# runtime). See the file's own comment.
+	"src/core/db/migrate-cli.ts",
+	# Table definitions. The "uncovered functions" are drizzle's `$defaultFn` /
+	# `$onUpdate` callbacks — data, not logic, and their effects are asserted in
+	# notes-service.test.ts.
+	"src/core/db/schema.ts",
+	# Dev-only scripts that drop and repopulate the database.
+	"src/core/db/seed.ts",
+	"src/core/db/reset.ts",
+]
+
+# The test files themselves always run to completion, so counting them tells you
+# nothing and dilutes the real number.
+coverageSkipTestFiles = true

@@ -24,6 +24,7 @@
 - [测试](#测试)
 - [新增业务的标准流程](#新增业务的标准流程)
 - [常用命令](#常用命令)
+- [工程化关卡](#工程化关卡)
 - [部署](#部署)
 - [环境变量](#环境变量)
 - [已知遗留与缺口](#已知遗留与缺口)
@@ -223,6 +224,9 @@ src/core/
 | `postcss.config.mjs` | 只有 `@tailwindcss/postcss` 一个插件 |
 | `next.config.ts` | next-intl 插件 + `serverExternalPackages`（libsql 的原生模块不能打包）+ 固定安全响应头 |
 | `Dockerfile` / `.dockerignore` | 单实例生产镜像，见[部署](#部署)。**未构建验证过** |
+| `bunfig.toml` | 只有 `[test]` 的覆盖率配置。**别在这里加全局 `preload`**，见[测试](#测试) |
+| `lefthook.yml` | Git 钩子（pre-commit 格式化 + commit-msg 校验），见[工程化关卡](#工程化关卡) |
+| `renovate.json` | 依赖升级分组策略，同上 |
 | `AGENTS.md` / `CLAUDE.md` | 给 AI 助手的项目说明。那段 Next.js 提示是 `next dev` 自动写入的，别手删 |
 
 ## 分层与依赖方向
@@ -1234,6 +1238,7 @@ stat -f %m data/dev.db && bun run test:unit && stat -f %m data/dev.db   # 两个
   `app/api/notes/` 真的接上了它——那里面每一个状态码在包装器出现之前都是 500
 - **`e2e/observability.e2e.ts` 守请求 id 链路和健康检查。** 这两样没法单测：整件事的前提是
   `src/proxy.ts` 真的在跑，而 proxy 只存在于一个运行中的 Next 服务里
+- **`e2e/a11y.e2e.ts` 用 axe 扫 5 个页面。** 它一次就扫出三个真问题，见[工程化关卡](#工程化关卡)
 - **`e2e/seo.e2e.ts` 守 canonical / hreflang / robots / sitemap / manifest。** 这一块每种错法
   都是静默的，只有断言能发现
 - **`e2e/security.e2e.ts` 守 CSP 和限流。** 单测只能断言 header 的**值**，断言不了浏览器在这个
@@ -1366,6 +1371,114 @@ fetcher，在 fetcher 里把 `ActionResult` 拆开（失败就 `throw`，这样 
 - 改了路由目录结构后 `typecheck` 可能报找不到旧路径的模块——那是 `.next/` 里的旧 typegen 缓存，
   `rm -rf .next` 再跑。
 
+## 工程化关卡
+
+### 覆盖率:阈值定成 0.90,但要知道它在量什么
+
+`bun run test:coverage` 跑单测并报覆盖率，阈值在 `bunfig.toml` 里。**只有传
+`--coverage` 时才会强制**，所以 `test:unit` / `test:dom` 不受影响——验证过。
+
+两条必须知道的：
+
+- **Bun 的阈值是按文件强制的，不是按总体。** 这就是 `coveragePathIgnorePatterns` 存在的
+  唯一原因。实测：整体是 ~98% funcs / ~98% lines，但全局 0.90 会失败，一路降到
+  `0.70/0.60` 才变绿——而那个数字挡不住任何东西。被忽略的几个文件的"未覆盖"都是对的：
+  `migrate.ts` 未覆盖的正是 `import.meta.main` 自跑块（它存在的意义就是"被 import 时不要
+  跑"），`schema.ts` 未覆盖的是 drizzle 的 `$defaultFn` / `$onUpdate` 回调（那是数据不是逻辑，
+  效果由 `notes-service.test.ts` 断言）。
+- **这个百分比本身是偏高的。** 覆盖率只统计**被加载过**的文件，所以 `core/mailer/`、
+  `core/storage/`、`core/auth/config.ts` 这些没有测试的文件压根不出现在报告里。它是防回归的
+  棘轮，不是"我们测了多少"的答案。
+
+### Git 钩子
+
+[lefthook.yml](lefthook.yml)。钩子由 lefthook 的 postinstall 装进 `.git/hooks`，而那个
+postinstall 能跑**只因为** `lefthook` 被列进了 `package.json` 的 `trustedDependencies`——
+bun 默认屏蔽生命周期脚本，不加这一条 `bun install` 会静默地不装钩子。钩子没生效就手动跑
+`bunx lefthook install`。
+
+**pre-commit 只做快且确定的事**：Biome 的格式化和 lint，且只作用于 staged 文件。
+不做 typecheck（要整个程序，好几秒）、不跑测试、不构建——那些在 CI。
+一个要跑 30 秒的钩子会被 `--no-verify` 绕过，而一个经常被绕过的钩子比没有更糟：
+它让人以为有东西在把关。
+
+用 `--write` 而不是只检查：Biome 在这里的修复是确定性的、纯格式的，为了让人手动跑一遍同样
+的命令而中断提交纯属摩擦。配 `stage_fixed: true`——没有它，修复只落在工作区，**提交进去的
+还是没修的那份**。
+
+`commit-msg` 校验 conventional commit 前缀。仓库本来用 `bun run commit`（czg）交互式写消息，
+但没有东西阻止手写的消息破坏约定。校验刻意宽松：只认类型前缀，不评判标题内容；
+merge / revert / fixup 消息直接放过。
+
+### 无障碍:axe 扫出了三个真问题
+
+[e2e/a11y.e2e.ts](e2e/a11y.e2e.ts) 在 5 个页面（含一个打开的浮层）上跑 axe，范围限定
+`wcag2a` / `wcag2aa` / `wcag21a` / `wcag21aa`——`best-practice` 那组是值得读的意见，
+但不值得让构建失败，混进来会让这套检查噪音大到被关掉。
+
+这个项目本来就很在意 a11y（react-aria 底座、到处 `aria-label`、整个测试套件用
+`getByRole` 定位），但**加上 axe 之后一次就扫出三个真问题**：
+
+1. **`--muted` 对比度不够。** 浅色模式 `oklch(55.17% 0 0)` 对 `--background` 只有
+   **4.24:1**，WCAG AA 正文要求 4.5:1。改成 50% 后是 4.97:1。深色模式那份本来就是 8.04:1，
+   没动。
+2. **`--success` 和它的前景色配不出可读对比。** 白字配 `oklch(0.6277 …)` 只有 **3.13:1**，
+   改成 `0.52` 后 4.76:1。dashboard 把这些色号称作"底色 + 可读的前景色"——配不出可读度就是
+   这句话不成立。
+3. **dashboard 的 ProgressBar 没有可访问名称。** 它有一个可见的 `<p>` 标签，但 `<p>` 不是
+   label 元素，没有任何东西把两者关联起来，屏幕阅读器读到的是一个无名进度条。补了
+   `aria-label`。
+
+**唯一被禁用的规则是 `nested-interactive`**，原因是 HeroUI 的 `Tooltip` 会把你给它的东西
+包进它自己的可聚焦元素里：
+
+```html
+<div class="tooltip__trigger" role="button" tabindex="0">
+  <a aria-label="概览" …>…</a>
+</div>
+```
+
+可聚焦的 `role="button"` 里套一个可聚焦的链接是真问题（多一个 tab 停靠点，外层还报错了
+角色），但这是 **HeroUI 的标记而不是本项目的用法**——我们写的是
+`<Tooltip><Link/><Tooltip.Content/></Tooltip>`，包装是它加的，没有 prop 可以关掉。
+按规则名单独禁用（而不是跳过受影响的页面）保住了其余所有检查。见
+[已知遗留与缺口](#已知遗留与缺口)。
+
+> **axe 能查什么、不能查什么**：它查机器可判定的部分——对比度、缺失的表单标签、非法 ARIA、
+> 重复 id。它判断不了聚焦顺序是否合理，也判断不了一个标签是否**有意义**。
+> WCAG 里大约只有三分之一是机器可判定的，所以通过它是**底线，不是证书**。
+
+### 依赖升级
+
+[renovate.json](renovate.json)。选 Renovate 而不是 Dependabot，是因为它对 Bun 的
+`bun.lock` 支持更成熟，而这个仓库 pin 了大量精确版本——**模板最容易腐烂的就是依赖**。
+需要在仓库上安装 Renovate 的 GitHub App（一次性）。
+
+分组规则不是装饰，每一条都对应一种"分开升就一定挂"的情况：
+
+- **`next` / `react` / `react-dom` 一起**：分开升，每个 PR 都会红到三个都进来为止。
+- **`drizzle-orm` / `drizzle-kit` 一起**：共用迁移格式，单独升一个可能让 `db:generate`
+  产出运行时读不了的 SQL。
+- **`next-auth` / `@auth/*` 永不批量、永不自动合并**：还是 5.x beta，beta 之间就有破坏性变更。
+- **`next-themes` 打了标签 `has-patch`**：它有 patch（见[明暗主题](#明暗主题)），
+  一升级 patch 必然失效、`bun install` 会直接报错——**这是好事**，它强制你重新验证一遍。
+- patch / minor 批量成一个 PR：三十个独立的版本号 PR 是"依赖 PR 开始被无视"的起点。
+
+### 为什么没有做 i18n 文案裁剪
+
+评估过，**测量之后决定不做**。`NextIntlClientProvider` 目前把整个 locale 的文案交给客户端，
+听起来该裁，但：
+
+- `zh.json` 总共 **4120 字节**。
+- 客户端组件用到 **11 个 namespace 里的 9 个**，全局裁剪最多省下 `Meta` 那 1.3%。
+- 占比最大的是 `Dashboard`（34%，1399 字节），而它只有 dashboard 页用——但那一页
+  README 就是让你删的。
+
+也就是说最理想的按路由裁剪能省 ~1.4 KB，代价是引入一个"忘了给某个 namespace 授权就静默
+渲染出 key 名"的机制。**不划算。** 什么时候重新考虑：文案总量涨到几十 KB，或者出现一个又大
+又只属于某条路由的 namespace——那时的做法是在那个页面里再套一层
+`NextIntlClientProvider` 只给它自己的 namespace，而不是在根布局搞白名单。
+
 ## 部署
 
 形状是**单实例 + 挂载卷上的一个 SQLite 文件**。这是有意的，不是凑合——什么时候该换见下面
@@ -1478,7 +1591,11 @@ CI（`.github/workflows/ci.yml`）四个并行 job：`lint` / `typecheck` / `tes
 3. **`onRequestError` 只写日志，没有接错误上报服务。** 形状是对的，但生产环境应该换成
    Sentry / OTel，见[可观测性](#可观测性)。`register()` 目前只做 `AUTH_URL` 启动检查，
    没有 tracing。
-4. **错误边界没有常驻的自动化测试。** 渲染出来的部分由
+4. **rail 上的每个按钮都多一个 tab 停靠点。** HeroUI 的 `Tooltip` 会把子元素包进
+   `<div role="button" tabindex="0">`，于是可聚焦元素里套了可聚焦元素。这是库的标记不是用法
+   问题，没有 prop 能关掉；`e2e/a11y.e2e.ts` 因此单独禁用了 `nested-interactive` 这条规则，
+   理由写在那里。要真修得 patch HeroUI 或者把 rail 的 tooltip 去掉。
+5. **错误边界没有常驻的自动化测试。** 渲染出来的部分由
    [ErrorState.test.tsx](src/components/ui/ErrorState.test.tsx) 覆盖，但"边界有没有真的接上"
    要靠一条故意抛错的路由，模板里不想常留这种东西。改完 `error.tsx` 之后照下面这样验一次
    （两个 `error.tsx` 都是这么验过的）：
@@ -1502,28 +1619,28 @@ CI（`.github/workflows/ci.yml`）四个并行 job：`lint` / `typecheck` / `tes
 
    `global-error.tsx` 要触发得让 `[locale]/layout.tsx` 自己抛错，代价比较大，一般改完它
    肉眼过一遍就行。
-5. **`src/core/storage/local-stub.ts` 只是占位**，写本地磁盘。真要用文件存储就照 `StorageAdapter`
+6. **`src/core/storage/local-stub.ts` 只是占位**，写本地磁盘。真要用文件存储就照 `StorageAdapter`
    接口换成 S3/R2 实现。
-6. **403 页没有任何地方会跳转过去。** 登录拦截解决的是"未登录"（弹到 `/login`），而项目里还没有
+7. **403 页没有任何地方会跳转过去。** 登录拦截解决的是"未登录"（弹到 `/login`），而项目里还没有
    角色模型，所以没有"已登录但无权限"这种情况。加了角色判断之后，service 抛 `ForbiddenError`
    （`core/errors.ts` 里已经有了），让页面 `redirect('/403')`。
    > 另一条路是 Next 的 `forbidden()` / `unauthorized()` 加 `forbidden.tsx` /
    > `unauthorized.tsx`，能顺手填掉这个缺口。**本项目刻意没走这条**：它需要打开
    > `experimental.authInterrupts`，模板不想依赖实验性 API；而且它靠抛中断工作，会被
    > `runAction` / `withHandler` 的 try/catch 影响（要靠 `unstable_rethrow` 放行）。
-7. **没有软删除。** `notesTable` 有 `createdAt` / `updatedAt`，但删除是真删。需要"回收站"或
+8. **没有软删除。** `notesTable` 有 `createdAt` / `updatedAt`，但删除是真删。需要"回收站"或
    审计的话加 `deletedAt`，并记得**每个查询的 `where` 都要带上它**——漏一个就等于泄露已删数据。
-8. **标题搜索是 `LIKE` 扫表。** 通配符已经转义、大小写已经处理（见
+9. **标题搜索是 `LIKE` 扫表。** 通配符已经转义、大小写已经处理（见
    [SQLite 的几个坑](#sqlite-的几个坑)），但 `lower()` 让表达式用不上索引，所以搜索是扫这个
    用户的行。每用户数据量大的域应该换 SQLite 的 FTS5。
-9. **登录页的微信按钮是禁用的占位。** 后端没有对应 provider，接法见
-   `src/core/auth/config.ts` 的 `providers`。
-10. **没有 `authenticator` 表。** `@auth/drizzle-adapter` 的 WebAuthn 方法会去查它，
+10. **登录页的微信按钮是禁用的占位。** 后端没有对应 provider，接法见
+    `src/core/auth/config.ts` 的 `providers`。
+11. **没有 `authenticator` 表。** `@auth/drizzle-adapter` 的 WebAuthn 方法会去查它，
     表不存在时那些方法运行时会炸。本模板不用 WebAuthn，所以没建；要用的话往
     `src/core/db/schema.ts` 里补一个，并把它传给 `DrizzleAdapter`。
-11. **英文文案是从中文翻译来的占位内容**，dashboard 和登录页左侧插画那些都是展示用的样例文字，
+12. **英文文案是从中文翻译来的占位内容**，dashboard 和登录页左侧插画那些都是展示用的样例文字，
     不是真实业务文案。
-12. **`/dashboard` 和 `/notes` 都是给你删的。** 前者是设计系统活文档，后者是业务示例。
+13. **`/dashboard` 和 `/notes` 都是给你删的。** 前者是设计系统活文档，后者是业务示例。
 
 ### 主动放弃的东西（不是缺口）
 

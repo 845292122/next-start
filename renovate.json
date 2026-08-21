@@ -1,0 +1,68 @@
+{
+	"$schema": "https://docs.renovatebot.com/renovate-schema.json",
+	"extends": ["config:recommended", ":semanticCommits"],
+	"timezone": "Asia/Shanghai",
+	"schedule": ["before 6am on monday"],
+	"prConcurrentLimit": 5,
+	"labels": ["dependencies"],
+	"rangeStrategy": "pin",
+	"lockFileMaintenance": {
+		"enabled": true,
+		"schedule": ["before 6am on monday"]
+	},
+	"packageRules": [
+		{
+			"description": "Patch and minor updates for anything already proven by CI, batched into one PR. Reviewing thirty individual bumps is how dependency PRs start getting ignored.",
+			"matchUpdateTypes": ["patch", "minor"],
+			"groupName": "non-major dependencies",
+			"automerge": false
+		},
+		{
+			"description": "The framework and its runtime move together. next / react / react-dom in separate PRs would each fail CI until all three land.",
+			"matchPackageNames": [
+				"next",
+				"react",
+				"react-dom",
+				"@types/react",
+				"@types/react-dom"
+			],
+			"groupName": "next + react"
+		},
+		{
+			"description": "HeroUI sits on react-aria, and a HeroUI bump that lags its peer often breaks styling in ways only e2e catches.",
+			"matchPackageNames": ["@heroui/**", "react-aria-components"],
+			"groupName": "heroui"
+		},
+		{
+			"description": "drizzle-orm and drizzle-kit share a migration format; upgrading one alone can make `db:generate` emit SQL the runtime can't read.",
+			"matchPackageNames": ["drizzle-orm", "drizzle-kit"],
+			"groupName": "drizzle"
+		},
+		{
+			"description": "A Playwright bump also changes the browser build, so the CI cache key moves with it — see the e2e job in ci.yml.",
+			"matchPackageNames": ["@playwright/test"],
+			"groupName": "playwright"
+		},
+		{
+			"description": "Still a 5.x beta with breaking changes between betas. Never batched, never automerged: read the release notes.",
+			"matchPackageNames": ["next-auth", "@auth/**"],
+			"groupName": "auth.js (beta — read the changelog)",
+			"automerge": false
+		},
+		{
+			"description": "next-themes is patched in patches/. Any bump invalidates that patch and `bun install` will fail loudly — which is the point. See DEVELOPMENT.md § 明暗主题.",
+			"matchPackageNames": ["next-themes"],
+			"addLabels": ["has-patch"],
+			"automerge": false
+		},
+		{
+			"description": "Pinned exactly on purpose (see package.json). Major bumps get their own PR so the changelog is read.",
+			"matchUpdateTypes": ["major"],
+			"automerge": false
+		}
+	],
+	"vulnerabilityAlerts": {
+		"labels": ["security"],
+		"schedule": ["at any time"]
+	}
+}

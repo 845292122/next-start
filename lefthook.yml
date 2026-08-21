@@ -1,0 +1,54 @@
+# Git hooks, installed into .git/hooks by lefthook's postinstall.
+#
+# That postinstall only runs because `lefthook` is listed in package.json's
+# `trustedDependencies` — bun blocks lifecycle scripts by default, so without that
+# entry `bun install` would silently leave the hooks uninstalled. If hooks aren't
+# firing, `bunx lefthook install` is the manual equivalent.
+#
+# ## What belongs here, and what doesn't
+#
+# A pre-commit hook has one job: catch the things that are *fast* and *certain*.
+# Everything slow stays in CI. A hook that takes 30 seconds gets bypassed with
+# `--no-verify`, and a hook that's routinely bypassed is worse than no hook —
+# it creates the belief that something is being checked.
+#
+# So: formatting and lint on the staged files only. Not typecheck (needs the whole
+# program, several seconds), not tests, not the build. CI runs all of those.
+
+pre-commit:
+  parallel: true
+  jobs:
+    - name: biome
+      # `--staged` limits Biome to the files being committed, and `--no-errors-on-unmatched`
+      # keeps a commit that touches only, say, a .md file from failing on "no files
+      # matched".
+      #
+      # `--write` rather than a check: Biome's fixes are deterministic and
+      # formatting-only here, so failing the commit to make the developer run the
+      # same command by hand is pure friction. `stage_fixed` then re-stages what it
+      # changed — without that, the fix lands in the working tree but the *unfixed*
+      # version is what gets committed.
+      run: bunx biome check --write --staged --no-errors-on-unmatched
+      stage_fixed: true
+
+commit-msg:
+  jobs:
+    - name: conventional-commit
+      # The repo uses `bun run commit` (czg) to author messages interactively, but
+      # nothing stopped a hand-written message from breaking the convention. This is
+      # a deliberately loose check: type prefix, optional scope, optional `!`, then a
+      # subject. It rejects a typo'd type, not a debatable subject line.
+      #
+      # `[skip ci]`-style messages and merge/revert/fixup commits are exempted
+      # because git and the tooling generate them.
+      run: |
+        head=$(head -1 "{1}")
+        case "$head" in
+          Merge*|Revert*|revert*|fixup!*|squash!*) exit 0 ;;
+        esac
+        printf '%s' "$head" | grep -qE '^(feat|fix|docs|style|refactor|perf|test|build|ci|chore)(\([a-z0-9/._-]+\))?!?: .+' || {
+          echo "commit message must start with a conventional type, e.g. 'feat(notes): ...'"
+          echo "got: $head"
+          echo "use \`bun run commit\` for an interactive prompt"
+          exit 1
+        }

@@ -40,14 +40,28 @@
 	--field-placeholder: oklch(55.17% 0 0);
 	--focus: oklch(0 0 0);
 	--foreground: oklch(21.03% 0 0);
-	--muted: oklch(55.17% 0 0);
+	/*
+	 * Darkened from the customizer's 55.17%, which measures 4.24:1 against
+	 * --background and therefore fails WCAG AA for body text (needs 4.5:1). 50%
+	 * measures 4.97:1. Caught by e2e/a11y.e2e.ts — the dark palette's --muted was
+	 * already fine at 8.04:1.
+	 */
+	--muted: oklch(50% 0 0);
 	--overlay: oklch(100% 0 0);
 	--overlay-foreground: oklch(21.03% 0 0);
 	--scrollbar: oklch(87.1% 0 0);
 	--segment: oklch(100% 0 0);
 	--segment-foreground: oklch(21.03% 0 0);
 	--separator: oklch(92% 0 0);
-	--success: oklch(0.6277 0.1604 153.06);
+	/*
+	 * Darkened from the customizer's 0.6277. Measured against --success-foreground
+	 * (near-white): 0.6277 gives 3.13:1, which fails WCAG AA for normal text; 0.52
+	 * gives 4.76:1. The dashboard documents these as "a base, a readable
+	 * foreground" — a pairing that isn't readable makes that claim false. Caught by
+	 * e2e/a11y.e2e.ts on the success Chip. The dark palette's --success is paired
+	 * with a *dark* foreground and already passes.
+	 */
+	--success: oklch(0.52 0.1604 153.06);
 	--success-foreground: oklch(98% 0.016 153.06);
 	--surface: oklch(100% 0 0);
 	--surface-foreground: oklch(21.03% 0 0);

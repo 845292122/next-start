@@ -60,7 +60,10 @@ jobs:
           path: ~/.bun/install/cache
           key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
       - run: bun install --frozen-lockfile
-      - run: bun run test
+      # --coverage, so the per-file threshold in bunfig.toml is enforced. Running
+      # `bun run test` here instead would pass with coverage silently rotting.
+      - run: bun run test:coverage
+      - run: bun run test:dom
 
   # Its own job even though the e2e job below also builds. A build failure here
   # says "the build broke"; the same failure inside e2e surfaces as a webServer
