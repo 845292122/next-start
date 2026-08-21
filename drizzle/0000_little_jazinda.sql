@@ -38,10 +38,11 @@ CREATE TABLE `user` (
 	`email` text,
 	`emailVerified` integer,
 	`image` text,
-	`passwordHash` text
+	`phone` text
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `user_email_unique` ON `user` (`email`);--> statement-breakpoint
+CREATE UNIQUE INDEX `user_phone_unique` ON `user` (`phone`);--> statement-breakpoint
 CREATE TABLE `verificationToken` (
 	`identifier` text NOT NULL,
 	`token` text NOT NULL,

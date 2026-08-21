@@ -12,6 +12,7 @@
 - [分层与依赖方向](#分层与依赖方向)
 - [数据层](#数据层)
 - [UI 与主题](#ui-与主题)
+  - [什么该写进 globals.css](#什么该写进-globalscss)
 - [认证](#认证)
 - [国际化](#国际化)
 - [编码规范](#编码规范)
@@ -98,7 +99,7 @@ src/app/
 src/components/
 ├── layout/     # 应用外壳：AppShell.tsx + NavLinks.ts
 ├── providers/  # 全局 Provider（AppProviders.tsx）
-└── ui/         # 通用小部件：color-mode / locale-switch / account-menu / SignInArt
+└── ui/         # 通用小部件：BlackHoleMark / LoginHero / color-mode / locale-switch / sign-out-button
 ```
 
 规则：**这里不写业务逻辑，也不碰数据库。** 只依赖 props、HeroUI 和 session。要用到某个业务域的
@@ -137,14 +138,14 @@ src/core/
 │   ├── schema.ts       # 建表（就是它，没有 .prisma 文件）
 │   ├── client.ts       # drizzle 实例单例（globalThis 缓存）
 │   ├── migrate.ts      # 程序化迁移，脚本和单测共用
-│   ├── seed.ts         # demo@example.com / demo1234 + 两条笔记
+│   ├── seed.ts         # demo 用户（手机号 13800000000）+ 两条笔记
 │   └── reset.ts        # db:reset 的实现
 ├── auth/
 │   ├── config.ts       # Auth.js 配置：adapter、providers、callbacks
 │   ├── index.ts        # 导出 handlers / auth / signIn / signOut
-│   ├── schema.ts       # credentialsSchema，config 和登录表单共用
+│   ├── schema.ts       # phoneOtpSchema + 固定演示码常量，config 和登录表单共用
 │   ├── session.ts      # getRequiredSession()，没登录直接抛
-│   └── password.ts     # scrypt 哈希，用 node:crypto 而非 Bun.password
+│   └── otp.ts          # 手机验证码的 stub，见"认证"一节
 ├── services/           # 业务逻辑 + 对应的 .test.ts
 ├── mailer/             # Resend 封装 + templates/*.tsx
 └── storage/            # StorageAdapter 接口 + 本地磁盘占位实现
@@ -152,9 +153,6 @@ src/core/
 
 几个已经踩过坑、别再踩回去的点（代码里都有注释）：
 
-- `src/core/auth/password.ts` 用 `node:crypto` 而不是 `Bun.password`：Next 的 Server Action /
-  Route Handler / Server Component 跑在普通 Node 进程里，即使你用 `bun run dev` 也一样，
-  Bun 专有 API 在那里不存在。**同一个原因决定了数据库驱动的选择**，见[数据层](#数据层)。
 - `src/core/db/client.ts` 把 drizzle 实例挂在 `globalThis` 上：Next 每次 dev HMR 和每个并行
   build worker 都会重新求值这个模块，不缓存就会每次新开一个数据库文件句柄。
 - `src/core/logger.ts` 的 pino transport 会起 worker 线程，**不要在 edge runtime 的文件里 import 它**。
@@ -204,7 +202,7 @@ src/app/ (路由、页面)
    见 [src/core/services/notes-service.ts](src/core/services/notes-service.ts)。这样即使某个
    handler 忘了校验，也拿不到别人的数据。`notes-service.test.ts` 里有一条用例专门守这件事。
 5. **`core/` 不许 import `features/`。** 所以登录表单和 Credentials provider 共用的
-   `credentialsSchema` 放在 `src/core/auth/schema.ts`，不在 `features/auth/` 里。
+   `phoneOtpSchema` 放在 `src/core/auth/schema.ts`，不在 `features/auth/` 里。
 
 两条数据流，按场景选（`notes` 域两条都示范了）：
 
@@ -287,15 +285,18 @@ import type { Note } from '@/core/db/schema'   // = typeof notesTable.$inferSele
 
 ### 样式入口只有一个
 
-[src/app/globals.css](src/app/globals.css)，三件事：
+[src/app/globals.css](src/app/globals.css)：
 
 ```css
 @import '@heroui/react/styles';   /* 内含 @import "tailwindcss" */
+:root, .light { --accent: ...; }  /* 单色主题覆盖，故意不包 @layer */
 @source '../';                    /* 让 Tailwind 扫 src/ */
 @theme { --font-sans: ...; --animate-page-enter: ...; }
+@keyframes pageEnter / blackholeSpin
+@layer components { ... }         /* 见下面「什么该写进 globals.css」 */
 ```
 
-两条都是必需的，各有原因：
+前两条都是必需的，各有原因：
 
 - **不要再单独 `@import "tailwindcss"`。** HeroUI 的入口
   （`node_modules/@heroui/styles/dist/index.css`）已经引过了，再引一次每个 utility 都会出现两遍。
@@ -304,6 +305,53 @@ import type { Note } from '@/core/db/schema'   // = typeof notesTable.$inferSele
   `src/` 里用到的 utility 一个都不会生成——页面会渲染成完全没样式。
 
 **没有 `tailwind.config.js`。** 主题令牌（字体栈、动画）写在 CSS 的 `@theme` 块里。
+
+### 什么该写进 globals.css
+
+优先级永远是 **Tailwind utility → HeroUI 语义变量 → `globals.css`**。只有下面这几类东西
+才值得进 `globals.css`，其余一律用 utility 表达在组件里：
+
+| 类别 | 现有例子 | 为什么不能用 utility |
+| --- | --- | --- |
+| 主题变量覆盖 | 单色主题那两个 `:root` / `.dark` 块 | 就是变量声明本身 |
+| `@theme` 令牌 | `--font-sans` / `--animate-page-enter` | Tailwind 靠它生成 utility |
+| `@keyframes` | `pageEnter`、`blackholeSpin` | 关键帧没有 utility 形式 |
+| 补 HeroUI 缺的样式 | `.button--shadow`、`.menu-item` 抬升 | 要挂到 HeroUI 自己的类名上 |
+| 多元素图形 | `.blackhole*` | conic-gradient + 遮罩写成 arbitrary value 没法读 |
+
+**主题覆盖那两块故意不包 `@layer`。** HeroUI 自己的变量在 `@layer base` 里，而按 Cascade
+Layers 规范，不在任何 layer 里的规则**无条件**压过所有 layer 里的规则，跟选择器特异性无关。
+所以裸放就能覆盖，不用去比特异性。反过来，补 HeroUI 组件样式的那几块**要**放
+`@layer components`，这样组件里一个 `shadow-none` utility 还能盖掉它（utilities 层高于
+components 层）。
+
+### 补出来的两个 HeroUI 样式
+
+HeroUI 3 有两处缺口，都在 `globals.css` 的 `@layer components` 里补上了：
+
+- **`.button--shadow`** —— v2 有 `variant="shadow"`，v3 砍掉了。补成一个**可叠加的修饰类**
+  而不是新 variant：HeroUI 每个颜色 variant 只是设 `--button-bg` 这几个变量，所以阴影颜色直接
+  从同一个变量 `color-mix()` 出来，能和任意 variant 组合，不用给每种颜色写一份。用法是手写
+  `className="button--shadow"`。在 `outline` / `ghost` 上几乎看不见——它们的 `--button-bg`
+  是透明的，这是预期结果。
+- **`.menu-item` 悬停抬升** —— HeroUI 的 `.menu-item` 已经声明了 `transition: box-shadow`
+  却从没设过任何阴影，钩子留着效果没实现。补的时候有三个坑，注释里都写了，改之前先读：
+  阴影要有 padding 容身之处（外层 popover 是滚动容器，按列表盒子裁剪）；白底浮层上的白卡片
+  必须给列表加底色才有图底关系；以及**那条 padding 覆盖必须打得过
+  `.dropdown__popover [data-slot="dropdown-menu"]` 的 (0,2,0) 特异性**——输了的话同一条规则
+  里其它声明照样生效，只有 padding 被吃掉，看起来完全不像特异性问题。
+
+### 侧边栏 rail 的两个取舍
+
+[AppShell.tsx](src/components/layout/AppShell.tsx)：
+
+- **导航项只有图标，文字进 `aria-label`。** 可访问名和从前有可见文字时一样，所以
+  `getByRole('link', { name: '设置' })` 那些 e2e 断言不受影响——改这里时别把 `aria-label` 弄丢。
+- **`Tooltip.Trigger` 包着 `Link`，而不是让 `Link` 当 trigger。** react-aria 只把 trigger
+  的事件交给它自己的可聚焦组件，而这里必须是 `next/link` 才有预取和 `useLinkStatus`。
+  代价是**悬停会出 tooltip，键盘聚焦不会**（实测确认）。屏幕阅读器读的是 `aria-label`，
+  所以无障碍名字没丢，缺的是"只用键盘的视力正常用户看不到文字标签"。要补齐就得把 tooltip
+  改成受控（`isOpen` + 自己管 hover/focus 和延迟），代价不小，目前选择不补。
 
 ### HeroUI 3 和 Mantine 的心智模型差异
 
@@ -364,11 +412,29 @@ zod 的报错也就永远不出现。用 react-hook-form 管校验时，在 `<Fo
 
 ## 认证
 
-Auth.js（next-auth 5 beta）+ `@auth/drizzle-adapter`，Credentials provider + JWT session。
+Auth.js（next-auth 5 beta）+ `@auth/drizzle-adapter`，一个 id 为 `phone-otp` 的 Credentials
+provider + JWT session。手机号+验证码登录本身就是注册——第一次验证通过的号码会当场建号
+（[src/core/auth/otp.ts](src/core/auth/otp.ts) 的 `findOrCreateUserByPhone()`），没有单独的
+注册页。
 
-- **表是自己定义后传给 adapter 的**，因为 `usersTable` 多一个 `passwordHash` 列；不传的话
-  adapter 会自己造一份和我们冲突的 `user` 定义。
+- **表是自己定义后传给 adapter 的**，因为 `usersTable` 多一个 `phone` 列；不传的话
+  adapter 会自己造一份和我们冲突的 `user` 定义。`email` 列留着（虽然 phone-otp 不用它）——
+  adapter 的 `DefaultSQLiteUsersTable` 契约需要它，将来接 OAuth（比如登录页上那个还没接的
+  微信按钮）也用得上。
 - `session.strategy` 必须是 `'jwt'`：Credentials provider 只支持 JWT session。别动。
+- **验证码是写死的演示常量，不是真的短信验证。** `src/core/auth/otp.ts` 没有接任何短信厂商，
+  `authorize()` 直接把提交的验证码和 `src/core/auth/schema.ts` 里的 `DEMO_VERIFICATION_CODE`
+  （`123456`）比对。这和 `core/mailer/send.ts`（没配 `RESEND_API_KEY` 就 `logger.warn` 不发信）、
+  `core/storage/local-stub.ts`（写本地磁盘的占位实现）是同一套"诚实的 stub"约定——能跑、
+  文档里写清楚是占位、留一个明确的替换点，不是伪装成真的。真要接短信厂商：把 `otp.ts` 换成
+  真的随机码生成 + 存进一张新表（带过期时间）+ 真的发短信,同时把 `LoginForm.tsx` 里
+  "获取验证码"按钮从纯客户端倒计时换成调一个 Server Action。
+- `DEMO_VERIFICATION_CODE` 单独放在 `core/auth/schema.ts` 而不是 `otp.ts`：`otp.ts` 会
+  `import { db }`,而 `LoginForm.tsx` 是 Client Component,要在按下"获取验证码"时把这个常量
+  显示在 toast 里。Client Component 导入任何一条最终会 `import` 到 `core/db/client.ts`
+  的链路,都会把 `@libsql/client`（连着 `node:fs`）一起打进浏览器 bundle,Turbopack 会直接
+  报 `does not support external modules (request: node:fs)` 构建失败。`schema.ts` 只有
+  `zod`,没有这个问题。
 - 加一种登录方式：只改 `src/core/auth/config.ts` 的 `providers`，OAuth 的账号关联由 adapter 处理。
 
 ### 路由守卫在哪，管到哪
@@ -473,7 +539,7 @@ import 顺序也是 Biome 自动排的，分组顺序：`bun:`/`node:` → 第�
 
 跟着现有文件走，不要另起一套：
 
-- 组件文件 PascalCase：`AppShell.tsx`、`SignInArt.tsx`、`LoginForm.tsx`
+- 组件文件 PascalCase：`AppShell.tsx`、`LoginHero.tsx`、`LoginForm.tsx`
 - hooks / 工具 / 非组件模块 kebab-case：`color-mode.tsx`、`locale-switch.tsx`、`notes-service.ts`
 - 数据库表变量带 `Table` 后缀：`usersTable`、`notesTable`
 
@@ -500,7 +566,8 @@ import 顺序也是 Biome 自动排的，分组顺序：`bun:`/`node:` → 第�
 
 - 颜色一律走语义 token（`bg-surface` / `text-muted` / `border-border` / `bg-accent-soft` …），
   **不要写死 `#fff` / `#000`**，也不要用 Tailwind 的调色板（`bg-gray-100`）——那些不跟明暗切换。
-- `globals.css` 只放三种东西：`@theme` 令牌、跨文件复用的 `@keyframes`、`body` 级样式。
+- `globals.css` 里该写什么，见[什么该写进 globals.css](#什么该写进-globalscss)——
+  能用 Tailwind utility 表达的就不要写进去。
 - 字体栈里必须带中文回退（`PingFang SC` / `Microsoft YaHei` / `Songti SC` / `Noto Serif SC`），
   Roboto、Georgia 这些都没有 CJK 字形——`@theme` 里的 `--font-sans` / `--font-serif` 就是为这件事。
 
@@ -696,17 +763,21 @@ CI（`.github/workflows/ci.yml`）四个并行 job：`lint` / `typecheck` / `tes
 
 按需要处理的优先级排：
 
-1. **`src/core/storage/local-stub.ts` 只是占位**，写本地磁盘。真要用文件存储就照 `StorageAdapter`
+1. **手机验证码是固定演示码，没有接真实短信厂商。** `src/core/auth/otp.ts` 不生成、不存储、
+   不发送任何验证码——`authorize()` 直接比对 `DEMO_VERIFICATION_CODE`（`123456`）。真要上线
+   之前必须换掉，见[认证](#认证)一节。
+2. **`src/core/storage/local-stub.ts` 只是占位**，写本地磁盘。真要用文件存储就照 `StorageAdapter`
    接口换成 S3/R2 实现。
-2. **403 页没有任何地方会跳转过去。** 登录拦截解决的是"未登录"（弹到 `/login`），而项目里还没有
+3. **403 页没有任何地方会跳转过去。** 登录拦截解决的是"未登录"（弹到 `/login`），而项目里还没有
    角色模型，所以没有"已登录但无权限"这种情况。加了角色判断之后让它 `redirect('/403')`。
-3. **登录页的微信按钮是禁用的占位。** 后端没有对应 provider，接法见
+4. **登录页的微信按钮是禁用的占位。** 后端没有对应 provider，接法见
    `src/core/auth/config.ts` 的 `providers`。
-4. **没有 `authenticator` 表。** `@auth/drizzle-adapter` 的 WebAuthn 方法会去查它，
+5. **没有 `authenticator` 表。** `@auth/drizzle-adapter` 的 WebAuthn 方法会去查它，
    表不存在时那些方法运行时会炸。本模板不用 WebAuthn，所以没建；要用的话往
    `src/core/db/schema.ts` 里补一个，并把它传给 `DrizzleAdapter`。
-5. **英文文案是从中文翻译来的占位内容**，dashboard 那一堆是组件展示用的样例文字，不是真实业务文案。
-6. **`/dashboard` 和 `/notes` 都是给你删的。** 前者是设计系统活文档，后者是业务示例。
+6. **英文文案是从中文翻译来的占位内容**，dashboard 和登录页左侧插画那些都是展示用的样例文字，
+   不是真实业务文案。
+7. **`/dashboard` 和 `/notes` 都是给你删的。** 前者是设计系统活文档，后者是业务示例。
 
 ### 主动放弃的东西（不是缺口）
 

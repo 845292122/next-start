@@ -1,9 +1,8 @@
 import { DrizzleAdapter } from '@auth/drizzle-adapter'
-import { eq } from 'drizzle-orm'
 import type { DefaultSession, NextAuthConfig } from 'next-auth'
 import Credentials from 'next-auth/providers/credentials'
-import { verifyPassword } from '@/core/auth/password'
-import { credentialsSchema } from '@/core/auth/schema'
+import { findOrCreateUserByPhone } from '@/core/auth/otp'
+import { DEMO_VERIFICATION_CODE, phoneOtpSchema } from '@/core/auth/schema'
 import { db } from '@/core/db/client'
 import {
 	accountsTable,
@@ -21,7 +20,7 @@ declare module 'next-auth' {
 
 export const authConfig: NextAuthConfig = {
 	// The tables are passed explicitly rather than letting the adapter define its
-	// own: usersTable carries an extra passwordHash column, and the adapter would
+	// own: usersTable carries an extra phone column, and the adapter would
 	// otherwise build a second, conflicting definition of `user`.
 	//
 	// authenticatorsTable is left out — it's WebAuthn-only and there's no such
@@ -50,26 +49,20 @@ export const authConfig: NextAuthConfig = {
 	},
 	providers: [
 		Credentials({
+			id: 'phone-otp',
 			credentials: {
-				email: { label: 'Email', type: 'email' },
-				password: { label: 'Password', type: 'password' },
+				phone: { label: 'Phone', type: 'text' },
+				code: { label: 'Code', type: 'text' },
 			},
 			async authorize(credentials) {
-				const parsed = credentialsSchema.safeParse(credentials)
+				const parsed = phoneOtpSchema.safeParse(credentials)
 				if (!parsed.success) return null
 
-				const [user] = await db
-					.select()
-					.from(usersTable)
-					.where(eq(usersTable.email, parsed.data.email))
-				if (!user?.passwordHash) return null
+				// See core/auth/otp.ts — this is a fixed demo code, not a real
+				// per-phone verification.
+				if (parsed.data.code !== DEMO_VERIFICATION_CODE) return null
 
-				const valid = await verifyPassword(
-					parsed.data.password,
-					user.passwordHash,
-				)
-				if (!valid) return null
-
+				const user = await findOrCreateUserByPhone(parsed.data.phone)
 				return {
 					id: user.id,
 					name: user.name,

@@ -25,14 +25,16 @@ export const usersTable = sqliteTable('user', {
 		.primaryKey()
 		.$defaultFn(() => crypto.randomUUID()),
 	name: text('name'),
+	// Kept even though the phone-otp provider never reads it: the adapter's
+	// DefaultSQLiteUsersTable contract expects an email column, and it's where a
+	// future OAuth provider (WeChat, say) would link an account.
 	email: text('email').unique(),
 	// timestamp_ms, not timestamp: the adapter writes and reads milliseconds.
 	// Getting the unit wrong here dates every verification to 1970.
 	emailVerified: integer('emailVerified', { mode: 'timestamp_ms' }),
 	image: text('image'),
-	// Extra column beyond what the adapter needs — Auth.js's own user table has
-	// no notion of a password; Credentials auth checks it here.
-	passwordHash: text('passwordHash'),
+	// The actual sign-in identity — see core/auth/otp.ts.
+	phone: text('phone').unique(),
 })
 
 export const accountsTable = sqliteTable(

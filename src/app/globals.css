@@ -134,6 +134,20 @@
 	}
 }
 
+/*
+ * Both rings share these keyframes and differ only by `--blackhole-tilt`,
+ * which each one sets on itself — a custom property inside a @keyframes is
+ * resolved against the animated element, so one animation covers both.
+ */
+@keyframes blackholeSpin {
+	from {
+		transform: rotateX(var(--blackhole-tilt)) rotateZ(0deg);
+	}
+	to {
+		transform: rotateX(var(--blackhole-tilt)) rotateZ(360deg);
+	}
+}
+
 @layer base {
 	html,
 	body {
@@ -142,5 +156,231 @@
 
 	body {
 		font-family: var(--font-sans);
+	}
+}
+
+/*
+ * The rail's black-hole brand mark (components/ui/BlackHoleMark.tsx).
+ *
+ * Written as CSS rather than Tailwind arbitrary values because the parts that
+ * make it work are unreadable inline: a conic-gradient sweep and a radial mask
+ * that hollows each disk into a ring. The @keyframes has to live in a
+ * stylesheet regardless.
+ *
+ * Deliberately no `perspective`. A fixed px perspective is a ratio against the
+ * element's size, so it looks right at one size and funnels the disks into a
+ * cone at any other — verified by rendering the mark at 48/96/224px. Plain
+ * `rotateX` is an orthographic projection instead: geometrically still 3D,
+ * scale-independent, and free of that distortion.
+ */
+@layer components {
+	.blackhole {
+		position: relative;
+		display: grid;
+		place-items: center;
+		/* Keeps the disk/core z-indexes below from escaping into the page. */
+		isolation: isolate;
+	}
+
+	.blackhole__disk {
+		position: absolute;
+		inset: 0;
+		border-radius: 50%;
+		/*
+		 * The sweep is the reason the rotation is visible at all — a uniformly
+		 * colored ring looks identical at every angle, however fast it turns.
+		 *
+		 * `--muted` rather than `--accent`: in this monochrome theme accent and
+		 * foreground are both near-black, so an accent disk would merge into the
+		 * dark core the moment the tilt collapses it over the middle. A muted
+		 * disk stays a distinct mid-tone against both the core and the rail.
+		 */
+		background: conic-gradient(
+			from 0deg,
+			transparent 30deg,
+			var(--muted) 84deg,
+			var(--foreground) 118deg,
+			var(--muted) 152deg,
+			transparent 205deg
+		);
+		/*
+		 * Hollows out the middle: this is what makes it a ring, not a disc. The
+		 * inner edge sits close in on purpose — pushed further out the ring stops
+		 * hugging the core and the mark reads as a ringed planet instead.
+		 */
+		mask: radial-gradient(closest-side, transparent 44%, #000 56%);
+		animation: blackholeSpin 6s linear infinite;
+	}
+
+	/*
+	 * One disk behind the core and one in front, so a bright arc visibly passes
+	 * over the silhouette on every orbit — that crossing is what reads as depth.
+	 * Counter-rotating at different speeds keeps them from moving as one rigid
+	 * object.
+	 */
+	.blackhole__disk--back {
+		--blackhole-tilt: 76deg;
+		z-index: 0;
+	}
+
+	.blackhole__disk--front {
+		--blackhole-tilt: 66deg;
+		inset: 16%;
+		z-index: 3;
+		opacity: 0.8;
+		animation-duration: 3.8s;
+		animation-direction: reverse;
+	}
+
+	/*
+	 * The photon ring — an untilted full circle just outside the core.
+	 *
+	 * This is the piece that makes the mark read as a black hole rather than as
+	 * a ringed planet or an eye: the tilted disks above squash into two side
+	 * lobes (which is geometrically right for a disk seen near edge-on, but
+	 * reads as eyelids), so something has to close the circle. Real black-hole
+	 * images get that closure from gravitational lensing bending the far side of
+	 * the disk over the top; here it's just a static ring.
+	 *
+	 * Sized in percentages, not a px border, so it holds its proportions at any
+	 * size the mark is rendered at.
+	 */
+	.blackhole__ring {
+		position: absolute;
+		inset: 26%;
+		z-index: 1;
+		border-radius: 50%;
+		background: var(--muted);
+		mask: radial-gradient(closest-side, transparent 76%, #000 88%);
+	}
+
+	/*
+	 * Event horizon. Dark in *both* schemes rather than inverting with the
+	 * theme like the rest of the mark: a black hole that turns into a white
+	 * ball in dark mode stops reading as a hole. `--background` is the one
+	 * token that sits behind `--surface` in the dark palette, so the core
+	 * genuinely recedes; the photon ring is what keeps the shape legible now
+	 * that the core no longer carries the contrast.
+	 */
+	.blackhole__core {
+		position: absolute;
+		inset: 34%;
+		z-index: 2;
+		border-radius: 50%;
+		background: var(--foreground);
+	}
+
+	.dark .blackhole__core,
+	[data-theme="dark"] .blackhole__core {
+		background: var(--background);
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.blackhole__disk {
+			animation: none;
+			/* Hold the tilt and pick a sweep angle — still a 3D mark, just still. */
+			transform: rotateX(var(--blackhole-tilt)) rotateZ(40deg);
+		}
+	}
+}
+
+/*
+ * HeroUI 3 dropped the `variant="shadow"` combo v2 had. Restoring it as an
+ * additive modifier class — like `.button--full-width` in
+ * node_modules/@heroui/styles/dist/components/button.css — rather than a color
+ * variant: every color variant there only *sets* `--button-bg` and friends, so
+ * tinting the shadow off that same variable makes this work with whatever color
+ * variant (`button--primary`, `button--danger`, ...) it's combined with, no
+ * per-color duplication needed. Apply alongside HeroUI's own classes, e.g.
+ * `className="button--shadow"` on a `<Button>`.
+ *
+ * @layer components, not unlayered: unlike the theme override above, nothing
+ * here needs to beat another layer — keeping it in `components` means a plain
+ * `shadow-none` utility className can still switch it off, since utilities
+ * outrank components.
+ */
+@layer components {
+	.button--shadow {
+		box-shadow: 0 10px 24px -6px
+			color-mix(in oklab, var(--button-bg) 55%, transparent);
+	}
+
+	.button--shadow:hover,
+	.button--shadow[data-hovered="true"] {
+		box-shadow: 0 14px 28px -6px
+			color-mix(in oklab, var(--button-bg) 65%, transparent);
+	}
+
+	.button--shadow:active,
+	.button--shadow[data-pressed="true"] {
+		box-shadow: 0 6px 14px -6px
+			color-mix(in oklab, var(--button-bg) 55%, transparent);
+	}
+
+	.button--shadow:disabled,
+	.button--shadow[aria-disabled="true"] {
+		box-shadow: none;
+	}
+}
+
+/*
+ * Lifted-card treatment for dropdown/menu items on hover.
+ *
+ * HeroUI's `.menu-item` already declares `transition: box-shadow ...`
+ * (node_modules/@heroui/styles/dist/components/menu-item.css) but never sets a
+ * shadow anywhere — the transition hook is there, the elevation isn't.
+ *
+ * Three things all have to be true for the lift to read, each measured off
+ * rendered pixels rather than computed styles:
+ *
+ *  1. **Room.** The shadow has to fit inside the list's padding, because the
+ *     popover wrapping the list is a scroll container (`overflow-y-auto` in
+ *     HeroUI's dropdown.css) and clips at the list's box — anything painted
+ *     past that is gone. So the padding below is what caps how large the
+ *     shadow can render. Two traps here, both verified rather than assumed:
+ *       - `overflow-clip-margin` looks like the fix and is *not*: the clip that
+ *         matters belongs to the popover, not the list, so it changes nothing.
+ *       - the padding override has to out-specify
+ *         `.dropdown__popover [data-slot="dropdown-menu"]` in dropdown.css,
+ *         which is (0,2,0). A plain `.dropdown__menu` rule loses on specificity
+ *         no matter how late it comes — its *other* declarations still apply,
+ *         which makes the failure look like "only padding is ignored".
+ *  2. **Contrast underneath.** A white item on a white popover cannot read as
+ *     raised however the shadow is tuned, so the list gets a faint tint and the
+ *     hovered item stays the lighter surface — the figure/ground split a raised
+ *     card depends on.
+ *  3. **Weight.** `--surface-shadow` is tuned for large cards and is far too
+ *     faint at this size, hence the purpose-built shadow.
+ *
+ * Only hover is touched. Keyboard highlighting rides on `[data-focus-visible]`,
+ * which HeroUI styles with a focus ring that is itself a box-shadow —
+ * overriding that here would quietly delete the focus ring. `:active` is left
+ * alone too, so its scale-down press feedback survives.
+ */
+@layer components {
+	.menu,
+	.dropdown__popover [data-slot="dropdown-menu"] {
+		/* Doubles as the shadow's headroom — see note 1 above. */
+		padding: 0.875rem;
+		background-color: var(--surface-secondary);
+	}
+
+	.menu-item {
+		/* The raised surface — lighter than the tinted list, in both schemes. */
+		--menu-item-lift-bg: var(--overlay);
+	}
+
+	.dark .menu-item,
+	[data-theme="dark"] .menu-item {
+		--menu-item-lift-bg: var(--default);
+	}
+
+	.menu-item:hover,
+	.menu-item[data-hovered="true"] {
+		background-color: var(--menu-item-lift-bg);
+		box-shadow:
+			0 0 0 1px color-mix(in oklab, var(--foreground) 10%, transparent),
+			0 3px 6px -1px color-mix(in oklab, var(--foreground) 30%, transparent),
+			0 10px 22px -4px color-mix(in oklab, var(--foreground) 45%, transparent);
 	}
 }

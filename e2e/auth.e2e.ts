@@ -12,7 +12,9 @@ test.describe('signed out', () => {
 	}) => {
 		await page.goto('/settings')
 		await expect(page).toHaveURL(/\/login$/)
-		await expect(page.getByRole('heading', { name: '登录' })).toBeVisible()
+		await expect(
+			page.getByRole('heading', { name: '手机号登录' }),
+		).toBeVisible()
 	})
 
 	test('/ redirects to /login rather than the dashboard', async ({ page }) => {
@@ -27,28 +29,25 @@ test.describe('signed out', () => {
 		)
 	})
 
-	test('a wrong password keeps you on the form with an error', async ({
-		page,
-	}) => {
+	test('a wrong code keeps you on the form with an error', async ({ page }) => {
 		await page.goto('/login')
-		await page.getByLabel('邮箱').fill('demo@example.com')
-		await page.getByLabel('密码').fill('wrong-password')
-		await page.getByRole('button', { name: '继续' }).click()
+		await page.getByLabel('手机号').fill('13800000000')
+		await page.getByLabel('验证码', { exact: true }).fill('000000')
+		await page.getByRole('button', { name: '登录', exact: true }).click()
 
-		// Matched by text rather than by role: Next's own route announcer is also
-		// role="alert", so a bare getByRole('alert') is a strict-mode violation.
-		await expect(page.getByText('邮箱或密码不正确。')).toBeVisible()
+		await expect(page.getByText('验证码不正确。')).toBeVisible()
 		await expect(page).toHaveURL(/\/login$/)
 	})
 
-	test('client-side validation rejects a malformed email', async ({ page }) => {
+	test('client-side validation rejects a malformed phone number', async ({
+		page,
+	}) => {
 		await page.goto('/login')
-		await page.getByLabel('邮箱').fill('not-an-email')
-		await page.getByLabel('密码').fill('demo1234')
-		await page.getByRole('button', { name: '继续' }).click()
+		await page.getByLabel('手机号').fill('123')
+		await page.getByLabel('验证码', { exact: true }).fill('123456')
+		await page.getByRole('button', { name: '登录', exact: true }).click()
 
-		// zod's message, surfaced through react-hook-form into HeroUI's FieldError.
-		await expect(page.getByLabel('邮箱')).toHaveAttribute(
+		await expect(page.getByLabel('手机号')).toHaveAttribute(
 			'aria-invalid',
 			'true',
 		)
@@ -62,11 +61,26 @@ test.describe('signed out', () => {
 	})
 })
 
-test('signing out returns to the login page', async ({ page }) => {
+test('signing out asks for confirmation first', async ({ page }) => {
 	await page.goto('/dashboard')
+	const railSignOut = page
+		.getByRole('navigation')
+		.getByRole('button', { name: '退出登录' })
 
-	await page.getByRole('button', { name: '账户' }).click()
-	await page.getByRole('menuitem', { name: '退出登录' }).click()
+	// Cancelling has to leave the session alone — a confirm dialog that signs you
+	// out anyway is worse than no dialog.
+	await railSignOut.click()
+	const dialog = page.getByRole('alertdialog')
+	await expect(dialog).toBeVisible()
+	await dialog.getByRole('button', { name: '取消' }).click()
+	await expect(dialog).toBeHidden()
+	await expect(page).toHaveURL(/\/dashboard$/)
 
+	// Confirming does.
+	await railSignOut.click()
+	await page
+		.getByRole('alertdialog')
+		.getByRole('button', { name: '确认退出' })
+		.click()
 	await expect(page).toHaveURL(/\/login$/)
 })

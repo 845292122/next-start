@@ -8,12 +8,14 @@
 		"dashboard": "Overview",
 		"notes": "Notes",
 		"settings": "Settings",
-		"new": "New",
 		"loading": "Loading page"
 	},
 	"Account": {
-		"label": "Account",
-		"signOut": "Sign out"
+		"signOut": "Sign out",
+		"signOutTitle": "Sign out?",
+		"signOutBody": "You'll need your phone number and a verification code to sign back in.",
+		"signOutConfirm": "Yes, sign out",
+		"cancel": "Cancel"
 	},
 	"ColorMode": {
 		"light": "light",
@@ -136,21 +138,38 @@
 		}
 	},
 	"Login": {
-		"title": "Sign in",
-		"artLabel": "Illustration of a person waving beside a plant",
-		"socialHeading": "Use your WeChat account",
-		"socialSubmit": "Sign in with WeChat (not wired)",
-		"emailDivider": "Or use your email",
-		"emailLabel": "Email",
-		"emailPlaceholder": "Your email",
-		"passwordLabel": "Password",
-		"passwordPlaceholder": "Password",
-		"submit": "Continue",
-		"invalidCredentials": "That email and password don't match.",
-		"demoHint": "Demo account: demo@example.com / demo1234",
-		"forgotPassword": "Forgot your password?",
-		"noAccount": "No account yet?",
-		"createAccount": "Sign up"
+		"title": "Sign in with your phone",
+		"phoneLabel": "Phone number",
+		"phonePlaceholder": "Enter your phone number",
+		"phoneInvalid": "Enter a valid phone number",
+		"codeLabel": "Verification code",
+		"codePlaceholder": "6-digit code",
+		"codeInvalid": "Enter the 6-digit code",
+		"sendCode": "Send code",
+		"resendIn": "Resend in {seconds, number}s",
+		"demoCodeToast": "Demo environment — the code is always {code}",
+		"subscribeLabel": "Send me tips, updates and offers",
+		"termsPrefix": "By continuing, you accept the ",
+		"privacyPolicy": "privacy policy",
+		"termsConjunction": " and ",
+		"termsOfService": "terms of service",
+		"submit": "Sign in",
+		"invalidCredentials": "That code isn't right.",
+		"demoHint": "Demo phone {phone}, code always {code}",
+		"divider": "or",
+		"wechatButton": "Sign in with WeChat (not wired)"
+	},
+	"LoginHero": {
+		"brand": "NEXT START",
+		"tabPrimary": "Get Started",
+		"tabSecondary": "Sample Code",
+		"cardBody": "A ready-made full-stack skeleton: HeroUI + Drizzle/SQLite + Auth.js + next-intl. Delete the sample business logic and what's left is your new project.",
+		"tagAuth": "Auth",
+		"tagDb": "Database",
+		"tagI18n": "i18n",
+		"tagTheme": "Theme",
+		"headlineLine1": "One Click Away From",
+		"headlineLine2": "Your Next Project"
 	},
 	"Errors": {
 		"forbidden": "Your account doesn't have access to this page. Ask an administrator if you need it.",

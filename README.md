@@ -2,7 +2,7 @@
 
 一个全栈 Next.js 项目模板：App Router + HeroUI + Drizzle/SQLite + Auth.js + next-intl，包管理和运行时用 Bun。
 
-开箱即用的部分：中英双语路由、明暗主题、邮箱密码登录（带路由守卫）、一条完整的
+开箱即用的部分：中英双语路由、明暗主题、手机号+验证码登录（带路由守卫）、一条完整的
 「建表 → service → 接口 → 界面」示例（`/notes`），以及 lint / typecheck / 单测 / 组件测试 / E2E 五条流水线。
 
 > **动手前先读 [DEVELOPMENT.md](DEVELOPMENT.md)** —— 分层规则、命名约定和一堆踩过的坑都在那里。
@@ -18,10 +18,11 @@ bun run db:migrate && bun run db:seed
 bun run dev
 ```
 
-打开 http://localhost:3000，用 seed 出来的账号登录：
+打开 http://localhost:3000，用 seed 出来的手机号登录（验证码是固定的演示码，不会真的发短信——
+见 [DEVELOPMENT.md 的认证一节](DEVELOPMENT.md#认证)）：
 
 ```
-demo@example.com / demo1234
+手机号 13800000000，验证码 123456
 ```
 
 **不需要 Docker，也不需要数据库服务。** SQLite 就是 `./data/dev.db` 这一个文件，第一次运行时自己建。

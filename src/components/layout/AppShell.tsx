@@ -1,16 +1,16 @@
 'use client'
 
-import { Button, ProgressBar, Tooltip } from '@heroui/react'
-import { Plus } from 'lucide-react'
+import { ProgressBar, Tooltip } from '@heroui/react'
 // useLinkStatus still comes from next/link — the Link below wraps it, so the
 // hook reads the same context.
 import { useLinkStatus } from 'next/link'
 import { useTranslations } from 'next-intl'
 import { type ComponentType, useCallback, useEffect, useState } from 'react'
 import { navLinks } from '@/components/layout/NavLinks'
-import { AccountMenu } from '@/components/ui/account-menu'
+import { BlackHoleMark } from '@/components/ui/BlackHoleMark'
 import { ColorModeButton } from '@/components/ui/color-mode'
 import { LocaleSwitchButton } from '@/components/ui/locale-switch'
+import { SignOutButton } from '@/components/ui/sign-out-button'
 import { Link, usePathname } from '@/i18n/navigation'
 
 /**
@@ -31,9 +31,15 @@ function LinkPending({ onPending }: { onPending: (delta: number) => void }) {
 }
 
 /**
- * The active state is one solid block with the icon and the label inside it,
- * built from HeroUI's accent-soft tokens so it follows the theme and the color
- * scheme without a second rule for dark mode.
+ * One rounded square per route, icon only.
+ *
+ * `rounded-3xl` rather than a hand-picked pixel radius: that token is
+ * `--radius * 3`, which is also what HeroUI's own `.button` base uses, so the
+ * nav squares and the buttons underneath them stay the same shape when
+ * `--radius` changes in globals.css.
+ *
+ * The label moves into `aria-label`, which keeps the accessible name the same
+ * as when it was visible text — that's what the rail's e2e assertions match on.
  */
 function NavItem({
 	label,
@@ -49,21 +55,28 @@ function NavItem({
 	onPending: (delta: number) => void
 }) {
 	return (
-		<Link href={href} className="block w-full no-underline">
+		<Tooltip delay={300}>
 			{/*
-			 * A span, not a button: the <a> above is already the interactive
-			 * element, and nesting a button inside a link breaks keyboard
-			 * semantics.
+			 * Tooltip.Trigger wraps the link rather than the link being the trigger
+			 * itself: react-aria only hands its trigger props to a focusable
+			 * component of its own (its Button/Link), and this has to stay a
+			 * next/link to keep prefetching and useLinkStatus. Hover therefore
+			 * opens the tooltip but keyboard focus does not — `aria-label` is what
+			 * carries the name for assistive tech, so nothing is lost there.
 			 */}
-			<span
-				data-active={active || undefined}
-				className="text-muted hover:bg-surface-hover hover:text-foreground data-active:bg-accent-soft data-active:text-accent-soft-foreground flex w-full cursor-pointer flex-col items-center justify-center gap-1 rounded-lg px-1 py-2.5 transition-colors"
-			>
-				<Icon className={active ? 'size-5.5 stroke-[2.2]' : 'size-5.5'} />
-				<span className="text-xs leading-tight font-medium">{label}</span>
-			</span>
-			<LinkPending onPending={onPending} />
-		</Link>
+			<Tooltip.Trigger>
+				<Link
+					href={href}
+					aria-label={label}
+					data-active={active || undefined}
+					className="bg-default text-muted hover:bg-default-hover hover:text-foreground data-active:bg-accent data-active:text-accent-foreground data-active:shadow-md flex size-11 items-center justify-center rounded-3xl transition-colors"
+				>
+					<Icon className="size-5" />
+					<LinkPending onPending={onPending} />
+				</Link>
+			</Tooltip.Trigger>
+			<Tooltip.Content placement="right">{label}</Tooltip.Content>
+		</Tooltip>
 	)
 }
 
@@ -81,22 +94,22 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 	}, [])
 
 	return (
-		<div className="flex h-dvh overflow-hidden">
+		/*
+		 * bg-surface on the shell, not on <body>: it makes the rail and the content
+		 * area the same white, while leaving the (auth) group — which has no
+		 * AppShell — on the page background.
+		 */
+		<div className="bg-surface flex h-dvh overflow-hidden">
 			{/* Left rail */}
 			<nav
 				aria-label={t('mainNav')}
-				className="bg-surface border-border flex w-22 shrink-0 flex-col items-center gap-2 border-r pt-6 pb-2"
+				className="flex w-22 shrink-0 flex-col items-center gap-6 py-6"
 			>
-				{/* Primary action */}
-				<Tooltip delay={300}>
-					<Button variant="primary" isIconOnly aria-label={t('new')}>
-						<Plus className="size-5.5" />
-					</Button>
-					<Tooltip.Content placement="right">{t('new')}</Tooltip.Content>
-				</Tooltip>
+				{/* mb on top of the flex gap — the mark wants noticeably more air
+				    under it than the nav squares want between themselves. */}
+				<BlackHoleMark className="mb-6 size-12" />
 
-				{/* Nav items */}
-				<div className="mt-2 flex w-full flex-1 flex-col gap-1 px-2">
+				<div className="flex flex-1 flex-col items-center gap-3">
 					{navLinks.map((link) => (
 						<NavItem
 							key={link.href}
@@ -109,11 +122,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 					))}
 				</div>
 
-				{/* Bottom: language + light/dark toggle + account */}
-				<div className="flex flex-col items-center gap-1 pb-1">
+				<div className="flex flex-col items-center gap-1">
 					<LocaleSwitchButton />
 					<ColorModeButton />
-					<AccountMenu />
+					<SignOutButton />
 				</div>
 			</nav>
 

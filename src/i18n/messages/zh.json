@@ -8,12 +8,14 @@
 		"dashboard": "概览",
 		"notes": "笔记",
 		"settings": "设置",
-		"new": "新建",
 		"loading": "页面加载中"
 	},
 	"Account": {
-		"label": "账户",
-		"signOut": "退出登录"
+		"signOut": "退出登录",
+		"signOutTitle": "确认退出登录？",
+		"signOutBody": "退出后需要重新用手机号和验证码登录。",
+		"signOutConfirm": "确认退出",
+		"cancel": "取消"
 	},
 	"ColorMode": {
 		"light": "浅色",
@@ -136,21 +138,38 @@
 		}
 	},
 	"Login": {
-		"title": "登录",
-		"artLabel": "一个人在植物旁挥手的插画",
-		"socialHeading": "使用微信账号",
-		"socialSubmit": "微信登录（未接入）",
-		"emailDivider": "或使用邮箱登录",
-		"emailLabel": "邮箱",
-		"emailPlaceholder": "你的邮箱",
-		"passwordLabel": "密码",
-		"passwordPlaceholder": "密码",
-		"submit": "继续",
-		"invalidCredentials": "邮箱或密码不正确。",
-		"demoHint": "演示账号：demo@example.com / demo1234",
-		"forgotPassword": "忘记密码？",
-		"noAccount": "还没有账号？",
-		"createAccount": "注册"
+		"title": "手机号登录",
+		"phoneLabel": "手机号",
+		"phonePlaceholder": "请输入手机号",
+		"phoneInvalid": "请输入正确的手机号",
+		"codeLabel": "验证码",
+		"codePlaceholder": "6 位验证码",
+		"codeInvalid": "请输入 6 位验证码",
+		"sendCode": "获取验证码",
+		"resendIn": "{seconds, number} 秒后重发",
+		"demoCodeToast": "演示环境验证码固定为 {code}",
+		"subscribeLabel": "接收产品更新和使用技巧",
+		"termsPrefix": "继续即代表同意",
+		"privacyPolicy": "《隐私政策》",
+		"termsConjunction": "与",
+		"termsOfService": "《服务条款》",
+		"submit": "登录",
+		"invalidCredentials": "验证码不正确。",
+		"demoHint": "演示手机号 {phone}，验证码固定 {code}",
+		"divider": "或",
+		"wechatButton": "微信登录（未接入）"
+	},
+	"LoginHero": {
+		"brand": "NEXT START",
+		"tabPrimary": "快速开始",
+		"tabSecondary": "示例代码",
+		"cardBody": "一套现成的全栈骨架：HeroUI + Drizzle/SQLite + Auth.js + next-intl。删掉示例业务，剩下的就是你的新项目。",
+		"tagAuth": "认证",
+		"tagDb": "数据库",
+		"tagI18n": "国际化",
+		"tagTheme": "主题",
+		"headlineLine1": "距离启动下一个项目",
+		"headlineLine2": "只差一次搭建"
 	},
 	"Errors": {
 		"forbidden": "你的账号没有这个页面的访问权限。需要的话找管理员开通。",

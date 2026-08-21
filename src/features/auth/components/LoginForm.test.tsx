@@ -46,24 +46,24 @@ afterEach(() => {
 })
 
 describe('LoginForm', () => {
-	test('renders the email and password fields', () => {
+	test('renders the phone and code fields', () => {
 		renderForm()
-		expect(screen.getByLabelText('邮箱')).toBeInTheDocument()
-		expect(screen.getByLabelText('密码')).toBeInTheDocument()
-		expect(screen.getByRole('button', { name: '继续' })).toBeInTheDocument()
+		expect(screen.getByLabelText('手机号')).toBeInTheDocument()
+		expect(screen.getByLabelText('验证码', { exact: true })).toBeInTheDocument()
+		expect(screen.getByRole('button', { name: '登录' })).toBeInTheDocument()
 	})
 
-	test('a malformed email is rejected before signIn is called', async () => {
+	test('a malformed phone number is rejected before signIn is called', async () => {
 		const user = userEvent.setup()
 		renderForm()
 
-		await user.type(screen.getByLabelText('邮箱'), 'not-an-email')
-		await user.type(screen.getByLabelText('密码'), 'demo1234')
-		await user.click(screen.getByRole('button', { name: '继续' }))
+		await user.type(screen.getByLabelText('手机号'), '123')
+		await user.type(screen.getByLabelText('验证码', { exact: true }), '123456')
+		await user.click(screen.getByRole('button', { name: '登录' }))
 
 		// The guard that matters: zod stopped this, so no network call happened.
 		await waitFor(() => {
-			expect(screen.getByLabelText('邮箱')).toHaveAttribute(
+			expect(screen.getByLabelText('手机号')).toHaveAttribute(
 				'aria-invalid',
 				'true',
 			)
@@ -71,19 +71,39 @@ describe('LoginForm', () => {
 		expect(signIn).not.toHaveBeenCalled()
 	})
 
-	test('valid credentials are handed to signIn and then routed onward', async () => {
+	test('"send code" is refused for a malformed phone number', async () => {
 		const user = userEvent.setup()
 		renderForm()
 
-		await user.type(screen.getByLabelText('邮箱'), 'demo@example.com')
-		await user.type(screen.getByLabelText('密码'), 'demo1234')
-		await user.click(screen.getByRole('button', { name: '继续' }))
+		await user.type(screen.getByLabelText('手机号'), '123')
+		await user.click(screen.getByRole('button', { name: '获取验证码' }))
+
+		// react-hook-form's own trigger('phone') is what blocks this — no
+		// countdown should start, and the field should end up invalid.
+		await waitFor(() => {
+			expect(screen.getByLabelText('手机号')).toHaveAttribute(
+				'aria-invalid',
+				'true',
+			)
+		})
+		expect(
+			screen.getByRole('button', { name: '获取验证码' }),
+		).not.toBeDisabled()
+	})
+
+	test('valid phone + code are handed to signIn and then routed onward', async () => {
+		const user = userEvent.setup()
+		renderForm()
+
+		await user.type(screen.getByLabelText('手机号'), '13800000000')
+		await user.type(screen.getByLabelText('验证码', { exact: true }), '123456')
+		await user.click(screen.getByRole('button', { name: '登录' }))
 
 		await waitFor(() => {
-			expect(signIn).toHaveBeenCalledWith('credentials', {
-				email: 'demo@example.com',
-				password: 'demo1234',
-				// redirect: false is what keeps a bad password on this page instead of
+			expect(signIn).toHaveBeenCalledWith('phone-otp', {
+				phone: '13800000000',
+				code: '123456',
+				// redirect: false is what keeps a bad code on this page instead of
 				// bouncing to Auth.js's own error screen.
 				redirect: false,
 			})
@@ -98,12 +118,12 @@ describe('LoginForm', () => {
 		const user = userEvent.setup()
 		renderForm()
 
-		await user.type(screen.getByLabelText('邮箱'), 'demo@example.com')
-		await user.type(screen.getByLabelText('密码'), 'wrong')
-		await user.click(screen.getByRole('button', { name: '继续' }))
+		await user.type(screen.getByLabelText('手机号'), '13800000000')
+		await user.type(screen.getByLabelText('验证码', { exact: true }), '000000')
+		await user.click(screen.getByRole('button', { name: '登录' }))
 
 		await waitFor(() =>
-			expect(screen.getByText('邮箱或密码不正确。')).toBeInTheDocument(),
+			expect(screen.getByText('验证码不正确。')).toBeInTheDocument(),
 		)
 		expect(push).not.toHaveBeenCalled()
 	})

@@ -1,4 +1,3 @@
-import { hashPassword } from '@/core/auth/password'
 import { db } from '@/core/db/client'
 import { notesTable, usersTable } from '@/core/db/schema'
 import { logger } from '@/core/logger'
@@ -9,8 +8,11 @@ const [demoUser] = await db
 	.insert(usersTable)
 	.values({
 		name: 'Demo User',
+		// email is sample profile data here — it isn't the sign-in identity.
+		// core/auth/otp.ts is what phone-otp actually checks, and it accepts this
+		// phone with the fixed demo code (see that file).
 		email: 'demo@example.com',
-		passwordHash: await hashPassword('demo1234'),
+		phone: '13800000000',
 	})
 	.returning()
 
