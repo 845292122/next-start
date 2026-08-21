@@ -24,6 +24,7 @@
 - [测试](#测试)
 - [新增业务的标准流程](#新增业务的标准流程)
 - [常用命令](#常用命令)
+- [部署](#部署)
 - [环境变量](#环境变量)
 - [已知遗留与缺口](#已知遗留与缺口)
 
@@ -170,6 +171,7 @@ src/core/
 │   ├── schema.ts       # 建表（就是它，没有 .prisma 文件）
 │   ├── client.ts       # drizzle 实例单例（globalThis 缓存）
 │   ├── migrate.ts      # 程序化迁移，脚本和单测共用
+│   ├── migrate-cli.ts  # 给纯 Node 环境（Docker 运行时）打包用的独立入口
 │   ├── seed.ts         # demo 用户（手机号 13800000000）+ 两条笔记
 │   └── reset.ts        # db:reset 的实现
 ├── auth/
@@ -220,6 +222,7 @@ src/core/
 | `playwright.config.ts` | E2E 配置：setup project + `webServer` 跑 db:reset → build → start |
 | `postcss.config.mjs` | 只有 `@tailwindcss/postcss` 一个插件 |
 | `next.config.ts` | next-intl 插件 + `serverExternalPackages`（libsql 的原生模块不能打包）+ 固定安全响应头 |
+| `Dockerfile` / `.dockerignore` | 单实例生产镜像，见[部署](#部署)。**未构建验证过** |
 | `AGENTS.md` / `CLAUDE.md` | 给 AI 助手的项目说明。那段 Next.js 提示是 `next dev` 自动写入的，别手删 |
 
 ## 分层与依赖方向
@@ -1363,6 +1366,78 @@ fetcher，在 fetcher 里把 `ActionResult` 拆开（失败就 `throw`，这样 
 - 改了路由目录结构后 `typecheck` 可能报找不到旧路径的模块——那是 `.next/` 里的旧 typegen 缓存，
   `rm -rf .next` 再跑。
 
+## 部署
+
+形状是**单实例 + 挂载卷上的一个 SQLite 文件**。这是有意的，不是凑合——什么时候该换见下面
+「什么时候这套不够用」。
+
+### 已经验证过的，和没验证过的
+
+Docker 在写这部分的环境里不可用，所以：
+
+| 项 | 状态 |
+| --- | --- |
+| `output: 'standalone'` 产物能跑 | ✅ 直接跑过 `node server.js` |
+| libsql 原生 addon 被正确 trace | ✅ `/api/health` 真跑了 `select 1` 并返回 200 |
+| 必须手动拷 `.next/static` | ✅ 移走它之后每个 `/_next/static` 请求都 500 |
+| 打包后的 migrator 在纯 Node 下能跑 | ✅ 建出了全部 6 张表 |
+| 构建需要 `AUTH_SECRET` | ✅ 移开 `.env.local` 后构建报 `Invalid environment variables` |
+| 运行时 `APP_URL` 进得去 robots.txt | ✅ 见 [SEO 与元数据](#seo-与元数据) |
+| **`Dockerfile` 本身** | ⚠️ **从未构建过。** 第一次 `docker build` 请当成 review |
+
+`Dockerfile` 表达的是上面这些已验证的事实，但镜像没造过。
+
+### 三个非显然的点
+
+**1. 构建期需要 `AUTH_SECRET`，但它不是运行时用的那个。**
+`next build` 会求值 `src/core/env.ts`。Dockerfile 里给的是占位值，且**故意不用 `ARG`**——
+`ARG` 会诱导别人在构建时传真 secret，那就会被烤进镜像层。运行时 `env.ts` 会用真实环境
+重新求值。
+
+**2. `standalone` 不拷 `public/` 和 `.next/static`。** Next 的文档说这两个应该交给 CDN。
+漏掉 `.next/static` 的症状是**静默的**：应用正常启动，页面没有样式，每个资源 404/500。
+Dockerfile 手动拷了。（本模板没有 `public/`，那条 COPY 注释掉了——`COPY` 一个不存在的
+路径会让构建失败。）
+
+**3. 所有 stage 的 libc 必须一致。** 三个 stage 全是 Alpine（musl），这是**功能要求**不是
+体积偏好：`standalone` 会把**构建 stage** 平台的 `.node` addon trace 进产物，所以用 Debian
+的 `oven/bun:1.3.3` 构建再喂给 Alpine 运行时，会拷进 `@libsql/linux-x64-gnu`，服务器第一次
+查询就死。要换就三个一起换。
+
+### 迁移策略
+
+容器启动时在同一个容器里跑：`node migrate.mjs && node server.js`。`&&` 保证迁移失败就不
+启动，而不是拿一个和代码不匹配的 schema 去服务流量。
+
+**这只适合当前这个形状**：一个实例，数据库就是刚挂上来那个卷里的一个文件，没有独立的
+数据库服务要迁移，也没有第二个副本来竞争。**两个副本同时跑这条命令会竞争同一个文件**——
+到那一步迁移就该放进一个独立的、跑完才允许副本启动的 job。
+
+migrator 是[单独打包](src/core/db/migrate-cli.ts)的，因为运行时镜像既没有 Bun 也没有源码。
+它是独立入口而不是复用 `migrate.ts`，原因是后者用 `import.meta.main` 判断要不要自跑，
+而那是 Bun 的特性——Node 直到 v24 才有，所以在 `engines` 允许的 Node 20/22 上，
+`migrate.ts` 的 Node 打包版会**静默什么都不做**。
+
+### 什么时候这套不够用
+
+- **要多副本。** SQLite 是单写者，多个实例写同一个文件会互相阻塞；而且内存里的限流器
+  （见[安全](#安全)）也会退化。换 Turso 连接串（libsql 驱动原生支持）或换回 Postgres。
+- **卷挂不上。** 那 SQLite 就不成立，直接换 Postgres：改 `schema.ts` 的 import、
+  `drizzle.config.ts` 的 dialect、以及 `client.ts` 的驱动。
+- **要 CDN。** 把 `.next/static` 和 `public/` 传上去，别让 Node 进程发静态资源。
+
+### CI
+
+五个并行 job：`lint` / `typecheck` / `test` / `build` / `e2e`。
+
+- **`build` 单独成 job**，即使 `e2e` 也会构建。构建失败在这里说的是"构建坏了"；同样的失败
+  在 e2e 里表现为 `webServer` 超时，得绕一大圈才到同一个答案。
+- **`concurrency` + `cancel-in-progress`**：同一个 ref push 三次不会跑三套完整套件。
+- **两层缓存**：bun 的包缓存按 `bun.lock` 的哈希，Playwright 浏览器按 Playwright 版本
+  （从 `bun pm ls` 读，不会和实际安装的漂移）。注意 `--with-deps` 装的系统库不在缓存里，
+  所以缓存命中时仍然要跑一次 `install-deps`。
+- **失败时上传 Playwright 报告**，成功时不传。
+
 ## 环境变量
 
 本地把 `.env.example` 拷成 `.env.local`，填上 `AUTH_SECRET`（`openssl rand -base64 32`）。
@@ -1461,3 +1536,4 @@ CI（`.github/workflows/ci.yml`）四个并行 job：`lint` / `typecheck` / `tes
 - **SQLite 的并发写入能力**。单文件数据库适合单实例部署；要多实例或高写入量，
   把 `DATABASE_URL` 换成 Turso 连接串（libsql 驱动本来就支持），或者换回 Postgres
   （改 `schema.ts` 的 import、`drizzle.config.ts` 的 dialect、以及 client 的驱动）。
+  完整的取舍和迁移策略见[部署](#部署)。

@@ -28,7 +28,9 @@ bun run dev
 手机号 13800000000，验证码 123456
 ```
 
-**不需要 Docker，也不需要数据库服务。** SQLite 就是 `./data/dev.db` 这一个文件，第一次运行时自己建。
+**开发不需要 Docker，也不需要数据库服务。** SQLite 就是 `./data/dev.db` 这一个文件，第一次运行时
+自己建。上生产有一个单实例的 `Dockerfile`（standalone 产物 + 挂载卷上的 SQLite），
+见 [DEVELOPMENT.md 的部署一节](DEVELOPMENT.md#部署)——那里也写明了哪些环节验证过、哪些没有。
 
 ## 技术栈
 

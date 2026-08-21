@@ -1,0 +1,46 @@
+# Keeping the build context small is the smaller reason for this file. The bigger
+# one is that a few of these would be actively harmful inside the image.
+
+# Secrets. `.env.local` holds the real AUTH_SECRET, and COPY . . would bake it into
+# a layer — where it stays even if a later step deletes it.
+.env*
+!.env.example
+
+# The dev database, and the e2e one. Copying either would ship real data and then
+# be shadowed by the /data volume anyway.
+data
+
+# Build output. Stale artifacts from a host build would be copied in and then
+# partially overwritten, which is worse than starting clean.
+.next
+out
+build
+tsconfig.tsbuildinfo
+next-env.d.ts
+
+# Installed on the host, for the host's platform. The native addons in here
+# (@libsql/darwin-arm64, sharp) are the wrong architecture for the image.
+node_modules
+
+# Nothing the build needs.
+.git
+.github
+.claude
+.vscode
+.idea
+coverage
+test-results
+playwright-report
+blob-report
+e2e/.auth
+.local-storage
+.DS_Store
+*.log
+
+# Docs and tooling that don't affect the build.
+Dockerfile
+.dockerignore
+README.md
+DEVELOPMENT.md
+AGENTS.md
+CLAUDE.md

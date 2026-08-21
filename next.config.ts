@@ -21,6 +21,25 @@ const nextConfig: NextConfig = {
 	serverExternalPackages: ['@libsql/client'],
 
 	/**
+	 * Emits `.next/standalone/`, a self-contained server that runs with
+	 * `node server.js` and no `node_modules` install. That's what makes the
+	 * Dockerfile's runtime stage small, and it's the reason the runtime image needs
+	 * no package manager at all.
+	 *
+	 * Two things it does **not** copy, by Next's design — the Dockerfile copies both
+	 * by hand, and forgetting either is a silent failure (the app boots and serves
+	 * unstyled pages with 404s for every asset):
+	 *   - `public/`
+	 *   - `.next/static/`
+	 *
+	 * The `serverExternalPackages` entry above interacts with this: standalone traces
+	 * which files to copy, and an external package's native `.node` addon has to be
+	 * traced correctly or the server dies at first query. Verified — see
+	 * DEVELOPMENT.md § 部署.
+	 */
+	output: 'standalone',
+
+	/**
 	 * The fixed-value security headers. The Content-Security-Policy is *not* here —
 	 * it needs a per-request nonce, so `src/proxy.ts` sets it.
 	 *
