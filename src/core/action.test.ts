@@ -2,8 +2,7 @@ import { beforeEach, describe, expect, mock, test } from 'bun:test'
 import type { Session } from 'next-auth'
 import { z } from 'zod'
 
-// See core/http.test.ts — suppresses the wrappers' own warn/error output.
-process.env.LOG_LEVEL = 'fatal'
+// LOG_LEVEL comes from test/unit-setup.ts — see core/http.test.ts.
 
 const FAKE_SESSION = {
 	user: { id: 'user-1', name: null, email: null, image: null },

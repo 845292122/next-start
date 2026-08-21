@@ -7,6 +7,12 @@ import { expect, test } from '@playwright/test'
  *
  * Every test makes its own note with a unique title, because the suite runs
  * fullyParallel against one shared database.
+ *
+ * **And every test that asserts its note is visible filters the list down to that
+ * title first.** The list is paginated (20 rows), so any test that creates a lot of
+ * notes — `the load-more button widens the page` creates 22 — can push another
+ * test's note off page one *while that test is running*. Searching makes each
+ * assertion independent of how much else exists.
  */
 function uniqueTitle(label: string) {
 	return `${label}-${test.info().testId}`
@@ -32,6 +38,8 @@ test('creates a note through the server action', async ({ page }) => {
 	await page.getByLabel('内容').fill('由 Playwright 创建')
 	await page.getByRole('button', { name: '添加' }).click()
 
+	// Filtered, so a concurrent test's bulk insert can't push this off page one.
+	await page.getByRole('searchbox').fill(title)
 	await expect(page.getByText(title, { exact: true })).toBeVisible()
 	// The form resets so the next note doesn't inherit the last one's title.
 	await expect(page.getByLabel('标题')).toHaveValue('')
@@ -78,6 +86,15 @@ test('toggles and deletes a note', async ({ page }) => {
 	await page.getByLabel('标题').fill(title)
 	await page.getByRole('button', { name: '添加' }).click()
 
+	// Filtered before every assertion below, including after each reload: without
+	// this, a concurrent bulk insert pushes this note off page one and the
+	// toBeChecked() assertions fail for a reason that has nothing to do with
+	// toggling.
+	const focusList = async () => {
+		await page.getByRole('searchbox').fill(title)
+	}
+	await focusList()
+
 	const row = page.locator('li').filter({ hasText: title })
 	await expect(row).toBeVisible()
 
@@ -92,9 +109,10 @@ test('toggles and deletes a note', async ({ page }) => {
 	await control.click()
 	await expect(checkbox).toBeChecked()
 
-	// A reload proves the PATCH persisted rather than only flipping the
+	// A reload proves the toggle persisted rather than only flipping the
 	// optimistic SWR cache.
 	await page.reload()
+	await focusList()
 	const rowAfter = page.locator('li').filter({ hasText: title })
 	await expect(rowAfter.getByRole('checkbox')).toBeChecked()
 
@@ -102,6 +120,7 @@ test('toggles and deletes a note', async ({ page }) => {
 	await expect(page.locator('li').filter({ hasText: title })).toHaveCount(0)
 
 	await page.reload()
+	await focusList()
 	await expect(page.locator('li').filter({ hasText: title })).toHaveCount(0)
 })
 

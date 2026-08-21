@@ -19,6 +19,7 @@
   - [什么该写进 globals.css](#什么该写进-globalscss)
 - [认证](#认证)
 - [国际化](#国际化)
+  - [SEO 与元数据](#seo-与元数据)
 - [编码规范](#编码规范)
 - [测试](#测试)
 - [新增业务的标准流程](#新增业务的标准流程)
@@ -79,6 +80,9 @@ src/app/
 │   ├── auth/[...nextauth]/
 │   ├── health/         # 健康检查（不鉴权），见[可观测性](#可观测性)
 │   └── notes/          # 外部消费者路径的示例，应用自己不调
+├── robots.ts           # /robots.txt —— 在 [locale] 外面（按 origin）
+├── sitemap.ts          # /sitemap.xml —— 同上
+├── manifest.ts         # /manifest.webmanifest —— 同上，且无法本地化
 ├── global-error.tsx    # 根布局自己炸掉时的最后兜底，零 import
 ├── favicon.ico
 └── globals.css         # 唯一的样式入口
@@ -154,6 +158,7 @@ src/core/
 ├── logger.ts           # pino 实例 + 脱敏 + loggablePath()
 ├── request-id.ts       # x-request-id 的来源与读取，见[可观测性](#可观测性)
 ├── security-headers.ts # CSP 与固定安全响应头的值，见[安全](#安全)
+├── site-url.ts         # 绝对 URL / locale 前缀 / hreflang，见 [SEO](#seo-与元数据)
 ├── rate-limit.ts       # 内存限流器（单实例够用，多实例要换 Redis）
 ├── zod-config.ts       # 浏览器里关掉 zod 的 JIT（CSP 会把它当 eval）
 ├── errors.ts           # 错误词表：AppError 及子类，每个带一个 code
@@ -1042,6 +1047,45 @@ next-intl 的 `router.replace()`，有两个原因，改回软导航就会各自
 
 普通页面跳转不受影响：`Link` 默认沿用当前 locale，不跨段，仍然是软导航。
 
+### SEO 与元数据
+
+绝对 URL 全部从 `APP_URL` 派生，收在 [src/core/site-url.ts](src/core/site-url.ts)，
+这样 metadata、sitemap、robots.txt 不会对"这个站叫什么"产生分歧。
+
+**这一块的每种错法都是静默的**：缺 `metadataBase` 不会报错，只会把 localhost 发布出去；
+locale 前缀算错不会报错，只会发布一堆会 307 的 URL。所以
+[e2e/seo.e2e.ts](e2e/seo.e2e.ts) 和 [core/site-url.test.ts](src/core/site-url.test.ts)
+把这些都钉住了。
+
+- **`localePrefix` 是 `as-needed`，所以默认语言没有前缀。** `localePath()` 封装了这条规则。
+  写错就会发布 `/zh/notes` 这种会重定向到 `/notes` 的规范链接。
+- **hreflang 必须互相声明。** 每个语言版本都要列出全部语言 + `x-default`，少一边搜索引擎
+  会把整组忽略掉。`localeAlternates()` 保证这点，e2e 在两个 locale 上都断言了。
+- **`robots.ts` / `sitemap.ts` 在 `[locale]` 外面。** 这两个是**按 origin** 的，放进 locale
+  段就会被发布到 `/en/robots.txt`，没有爬虫会去那里找。
+
+#### 两个实际踩到的坑
+
+**`robots.txt` / `sitemap.xml` 默认是静态生成的，会把构建时的 `APP_URL` 烤死。**
+实测发现的：`APP_URL=https://example.test bun run start` 之后页面的 canonical 是对的
+（页面是动态渲染），但 `robots.txt` 里还是 `http://localhost:3000`——因为它在构建时就
+渲染完了，而构建时没有 `APP_URL`。一个镜像部署到两个域名的话两边都是错的。
+所以这两个文件都加了 `export const dynamic = 'force-dynamic'`，代价是两个很少被请求的
+小文本响应。
+
+**sitemap 现在是空的，这是对的。** 本模板没有任何可被爬取的公开页面：`/` 是 307 跳到
+`/dashboard`（见 `(app)/page.tsx`），整个 `(app)` 组要登录，`/login` 和 `/403` 在
+robots.txt 里被 disallow。一开始我在 `PUBLIC_PATHS` 里放了 `/`，
+e2e 的"每个列出的 URL 都不能重定向"当场把它抓出来了。所以交付的是**接好线并测过的机制**，
+里面暂时没有内容——有公开页面之后往 `PUBLIC_PATHS` 加。
+
+#### manifest 不能本地化
+
+manifest 是按 origin 的，一个 origin 一份，没法按语言给不同的。所以它用默认语言的文案
+构建（`getTranslations` 显式传 locale，不读请求）。也没有 `icons`——本模板只有
+`favicon.ico`，而列出不存在的图标尺寸会让安装**失败**而不是降级。补了真的
+192×192 / 512×512 PNG 之后再往里写。
+
 ## 编码规范
 
 ### 格式化和 lint 全部交给 Biome
@@ -1187,6 +1231,8 @@ stat -f %m data/dev.db && bun run test:unit && stat -f %m data/dev.db   # 两个
   `app/api/notes/` 真的接上了它——那里面每一个状态码在包装器出现之前都是 500
 - **`e2e/observability.e2e.ts` 守请求 id 链路和健康检查。** 这两样没法单测：整件事的前提是
   `src/proxy.ts` 真的在跑，而 proxy 只存在于一个运行中的 Next 服务里
+- **`e2e/seo.e2e.ts` 守 canonical / hreflang / robots / sitemap / manifest。** 这一块每种错法
+  都是静默的，只有断言能发现
 - **`e2e/security.e2e.ts` 守 CSP 和限流。** 单测只能断言 header 的**值**，断言不了浏览器在这个
   策略下还愿不愿意跑这个应用——而 CSP 失败是安静的：页面照样加载，某个脚本或样式悄悄没生效，
   什么都不抛。所以那里有专门收集控制台 CSP 违规、并断言为空的用例
@@ -1326,6 +1372,7 @@ fetcher，在 fetcher 里把 `ActionResult` 拆开（失败就 `throw`，这样 
 | `DATABASE_URL` | 否 | `./data/dev.db` | SQLite **文件路径**（不是 URL）。`:memory:` 也认 |
 | `AUTH_SECRET` | **是** | — | Auth.js 签 JWT，缺了直接启动失败 |
 | `AUTH_URL` | 否（**生产应设**） | — | 本部署的规范 origin。不设时 Auth.js 从 `Host` 头推导回调 URL，见[安全](#安全)。缺失时 `register()` 会打启动告警 |
+| `APP_URL` | 否（**生产必设**） | `http://localhost:3000` | 对外的 origin，用来生成 canonical / hreflang / sitemap / OG 的绝对地址，见 [SEO 与元数据](#seo-与元数据)。通常和 `AUTH_URL` 同值。**填错是静默的**——发布出去的是 localhost |
 | `LOG_LEVEL` | 否 | `info` | pino 级别 |
 | `RESEND_API_KEY` | 否 | — | 不填时 `sendEmail()` 只打 warn 不发信 |
 | `EMAIL_FROM` | 否 | `onboarding@resend.dev` | 发件地址。默认是 Resend 的共享测试发件人，**只能发给 API key 所属的那个邮箱**，上线前换成自有已验证域名的地址 |

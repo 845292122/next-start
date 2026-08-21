@@ -24,3 +24,18 @@
  * that's actually guaranteed.
  */
 process.env.DATABASE_URL = ':memory:'
+
+/**
+ * Silences the wrappers' own warn/error output.
+ *
+ * Here rather than in the test files that care, for exactly the reason above:
+ * `core/logger.ts` reads the level off the frozen `env` object, so the first
+ * module to pull in `@/core/env` decides it for the whole process. Setting it at
+ * the top of `core/http.test.ts` worked only until another file — `site-url.test.ts`
+ * as it happens — imported env first, at which point the suite started dumping
+ * every logged failure to the console.
+ *
+ * `fatal` is the highest level in core/env.ts's enum, so warn and error are both
+ * suppressed. Raise it temporarily if you're debugging what a wrapper logged.
+ */
+process.env.LOG_LEVEL = 'fatal'

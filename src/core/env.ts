@@ -19,6 +19,15 @@ export const env = createEnv({
 		// straight from process.env — declared here so it's discoverable and
 		// validated, and so instrumentation.ts can warn when it's missing.
 		AUTH_URL: z.url().optional(),
+		// The public origin, used to build absolute URLs in metadata: canonical
+		// links, hreflang alternates, sitemap entries, Open Graph images. Metadata is
+		// rendered without a request in scope, so this cannot be derived from a Host
+		// header — it has to be configured.
+		//
+		// Defaulted so a fresh clone works, but a wrong value here is *silently*
+		// wrong: search engines and social scrapers get localhost URLs. In production
+		// set it to the same origin as AUTH_URL.
+		APP_URL: z.url().default('http://localhost:3000'),
 		LOG_LEVEL: z
 			.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace'])
 			.default('info'),
@@ -35,6 +44,7 @@ export const env = createEnv({
 		DATABASE_URL: process.env.DATABASE_URL,
 		AUTH_SECRET: process.env.AUTH_SECRET,
 		AUTH_URL: process.env.AUTH_URL,
+		APP_URL: process.env.APP_URL,
 		LOG_LEVEL: process.env.LOG_LEVEL,
 		RESEND_API_KEY: process.env.RESEND_API_KEY,
 		EMAIL_FROM: process.env.EMAIL_FROM,

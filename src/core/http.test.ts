@@ -1,11 +1,10 @@
 import { describe, expect, test } from 'bun:test'
 import { z } from 'zod'
 
-// The wrappers log every failure they map. `fatal` is the highest level in
-// core/env.ts's enum, so warn and error are both suppressed and the test output
-// stays readable. Set before the dynamic import below, because core/logger.ts
-// reads the level at module scope.
-process.env.LOG_LEVEL = 'fatal'
+// LOG_LEVEL is set to `fatal` for the whole unit run by test/unit-setup.ts
+// (--preload). It cannot be set here: core/logger.ts reads it off the frozen `env`
+// object, so whichever file imports @/core/env first wins — see the comment in
+// that preload.
 
 const {
 	AppError,

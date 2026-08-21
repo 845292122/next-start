@@ -5,6 +5,7 @@ import { hasLocale, NextIntlClientProvider } from 'next-intl'
 import { getTranslations, setRequestLocale } from 'next-intl/server'
 import { AppProviders } from '@/components/providers/AppProviders'
 import { auth } from '@/core/auth'
+import { localeAlternates, localeUrl, siteUrl } from '@/core/site-url'
 import { routing } from '@/i18n/routing'
 import '@/app/globals.css'
 
@@ -20,14 +21,28 @@ export async function generateMetadata({
 	// untrusted-locale guard is needed here. Falling back rather than calling
 	// notFound() — the layout is what owns the 404.
 	const { locale } = await params
-	const t = await getTranslations({
-		locale: hasLocale(routing.locales, locale) ? locale : routing.defaultLocale,
-		namespace: 'Meta',
-	})
+	const resolved = hasLocale(routing.locales, locale)
+		? locale
+		: routing.defaultLocale
+	const t = await getTranslations({ locale: resolved, namespace: 'Meta' })
 
 	return {
+		// Without metadataBase every relative URL in metadata (Open Graph images
+		// above all) resolves against localhost, silently, and social scrapers get a
+		// dead link. See core/site-url.ts.
+		metadataBase: new URL(siteUrl),
 		title: t('title'),
 		description: t('description'),
+		// The canonical URL plus hreflang for every locale. A bilingual site without
+		// this has the two locales competing as duplicate content.
+		alternates: localeAlternates(resolved),
+		openGraph: {
+			type: 'website',
+			locale: resolved,
+			url: localeUrl(resolved),
+			title: t('title'),
+			description: t('description'),
+		},
 	}
 }
 
