@@ -25,21 +25,22 @@ test('the light/dark toggle flips the theme and survives a reload', async ({
 }) => {
 	await page.goto('/dashboard')
 	const html = page.locator('html')
+	const scheme = () => html.getAttribute('data-mantine-color-scheme')
 
-	// next-themes writes the resolved scheme as a class on <html>, which is what
-	// HeroUI's variable blocks key off.
-	await expect(html).toHaveClass(/light|dark/)
-	const before = (await html.getAttribute('class')) ?? ''
+	// Mantine writes the resolved scheme to `data-mantine-color-scheme` on <html>,
+	// and every component's styles key off that attribute.
+	await expect(html).toHaveAttribute('data-mantine-color-scheme', /light|dark/)
+	const before = await scheme()
 
 	await page.getByRole('button', { name: /切换到(深色|浅色)模式/ }).click()
-	await expect(html).not.toHaveClass(new RegExp(`^${before}$`))
-	const after = (await html.getAttribute('class')) ?? ''
+	await expect.poll(scheme).not.toBe(before)
+	const after = await scheme()
 
-	// The blocking script next-themes injects is what makes this survive without
-	// a flash of the previous scheme.
+	// The blocking <ColorSchemeScript> in the document head is what makes this
+	// survive a reload without a flash of the previous scheme.
 	await page.reload()
 	await expect(
 		page.getByRole('heading', { name: '设计系统一览' }),
 	).toBeVisible()
-	await expect(html).toHaveClass(new RegExp(after))
+	await expect(html).toHaveAttribute('data-mantine-color-scheme', after ?? '')
 })

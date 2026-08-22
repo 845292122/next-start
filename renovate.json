@@ -29,9 +29,9 @@
 			"groupName": "next + react"
 		},
 		{
-			"description": "HeroUI sits on react-aria, and a HeroUI bump that lags its peer often breaks styling in ways only e2e catches.",
-			"matchPackageNames": ["@heroui/**", "react-aria-components"],
-			"groupName": "heroui"
+			"description": "Every @mantine/* package declares the others as an exact-version peer, so a partial bump fails to install. postcss-preset-mantine rides along because it compiles the CSS features the components' styles rely on.",
+			"matchPackageNames": ["@mantine/**", "postcss-preset-mantine"],
+			"groupName": "mantine"
 		},
 		{
 			"description": "drizzle-orm and drizzle-kit share a migration format; upgrading one alone can make `db:generate` emit SQL the runtime can't read.",
@@ -47,12 +47,6 @@
 			"description": "Still a 5.x beta with breaking changes between betas. Never batched, never automerged: read the release notes.",
 			"matchPackageNames": ["next-auth", "@auth/**"],
 			"groupName": "auth.js (beta — read the changelog)",
-			"automerge": false
-		},
-		{
-			"description": "next-themes is patched in patches/. Any bump invalidates that patch and `bun install` will fail loudly — which is the point. See DEVELOPMENT.md § 明暗主题.",
-			"matchPackageNames": ["next-themes"],
-			"addLabels": ["has-patch"],
 			"automerge": false
 		},
 		{

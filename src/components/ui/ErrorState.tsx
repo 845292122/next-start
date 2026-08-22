@@ -1,7 +1,16 @@
 'use client'
 
-import { Button, buttonVariants, Heading, Paragraph } from '@heroui/react'
-import { TriangleAlert } from 'lucide-react'
+import {
+	Button,
+	Center,
+	Code,
+	Group,
+	Stack,
+	Text,
+	ThemeIcon,
+	Title,
+} from '@mantine/core'
+import { WarningIcon } from '@phosphor-icons/react'
 
 /**
  * The shared body of the error boundaries — `app/[locale]/error.tsx` and
@@ -9,22 +18,13 @@ import { TriangleAlert } from 'lucide-react'
  * part lives here once.
  *
  * Takes finished strings rather than calling `useTranslations` itself: that keeps
- * it usable from a boundary that has no i18n provider above it. (`global-error`
- * is exactly that case, but it deliberately doesn't use this component either —
- * see the note in app/global-error.tsx.)
+ * it usable from a boundary that has no i18n provider above it. (`global-error` is
+ * exactly that case, but it deliberately doesn't use this component either — see
+ * the note in app/global-error.tsx.)
  *
  * Shape follows (app)/403/page.tsx and [locale]/not-found.tsx so the three error
  * screens read as one family.
  */
-
-/**
- * Class for the escape-hatch link, so both boundaries style it identically.
- *
- * `buttonVariants()` rather than `<Button>`: HeroUI's Button is a `<button>` and
- * takes no href. Same escape hatch as (app)/403/page.tsx.
- */
-export const errorStateLinkClass = buttonVariants({ variant: 'secondary' })
-
 export function ErrorState({
 	title,
 	description,
@@ -53,38 +53,37 @@ export function ErrorState({
 	onRetry: () => void
 }) {
 	return (
-		<div className="flex min-h-[60vh] items-center justify-center p-6">
-			<div className="flex max-w-100 flex-col items-center gap-4 text-center">
-				<div className="bg-danger-soft text-danger-soft-foreground flex size-18 items-center justify-center rounded-full">
-					<TriangleAlert className="size-9" />
-				</div>
-				<Heading level={1} className="text-2xl">
+		<Center mih="60vh" p="lg">
+			<Stack align="center" gap="md" maw={400} ta="center">
+				<ThemeIcon color="red" variant="light" size={72} radius="xl">
+					<WarningIcon size={36} />
+				</ThemeIcon>
+				{/*
+				 * order={1} for the document outline, size="h2" for the visual weight —
+				 * this is a full-screen state, so it owns the page's only <h1>, but it
+				 * shouldn't shout like a marketing headline.
+				 */}
+				<Title order={1} size="h2">
 					{title}
-				</Heading>
-				<Paragraph className="text-muted">{description}</Paragraph>
+				</Title>
+				<Text c="dimmed">{description}</Text>
 
 				{/*
 				 * The digest is the only thread between what the user sees and what
 				 * landed in the server log — in production Next replaces the real
 				 * message with this hash. Worth surfacing so a bug report can carry it.
 				 */}
-				{digest && digestLabel && (
-					<code className="text-muted bg-surface-secondary rounded px-2 py-1 font-mono text-xs">
-						{digestLabel}
-					</code>
-				)}
+				{digest && digestLabel && <Code>{digestLabel}</Code>}
 
-				<div className="mt-2 flex items-center gap-3">
-					<Button variant="primary" onPress={onRetry}>
-						{retryLabel}
-					</Button>
+				<Group mt="xs" gap="sm">
+					<Button onClick={onRetry}>{retryLabel}</Button>
 					{/*
 					 * The escape hatch matters as much as retry does: if the failure is
 					 * permanent, a retry button on its own leaves the user stuck.
 					 */}
 					{homeLink}
-				</div>
-			</div>
-		</div>
+				</Group>
+			</Stack>
+		</Center>
 	)
 }

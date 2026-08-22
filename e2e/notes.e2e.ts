@@ -98,15 +98,13 @@ test('toggles and deletes a note', async ({ page }) => {
 	const row = page.locator('li').filter({ hasText: title })
 	await expect(row).toBeVisible()
 
-	// Assertions read the real <input type="checkbox">, but the click has to land
-	// on the visible control: react-aria renders the input underneath its own
-	// decoration, so Playwright's actionability check reports the control span as
-	// intercepting pointer events on the input itself.
+	// The same element is clicked and asserted on: Mantine's Checkbox styles a real
+	// <input type="checkbox"> instead of hiding it behind a decorative proxy, and
+	// its check icon is `pointer-events: none`, so nothing intercepts the click.
 	const checkbox = row.getByRole('checkbox')
-	const control = row.locator('[data-slot="checkbox-content"]')
 
 	await expect(checkbox).not.toBeChecked()
-	await control.click()
+	await checkbox.click()
 	await expect(checkbox).toBeChecked()
 
 	// A reload proves the toggle persisted rather than only flipping the

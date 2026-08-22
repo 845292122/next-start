@@ -13,18 +13,21 @@
  *     it to supply them.
  *  2. **No `metadata` export.** Error boundaries are Client Components, where
  *     that export isn't supported; React's `<title>` element is the substitute.
- *  3. **Global styles don't reach it.** `next-themes`' blocking script and the
- *     `class="light|dark"` it writes both belong to the root layout that just
- *     failed, so `globals.css` would render here without a theme class.
+ *  3. **Global styles don't reach it.** Mantine's `<ColorSchemeScript>` and the
+ *     `data-mantine-color-scheme` attribute it writes both belong to the root
+ *     layout that just failed, so Mantine's stylesheet would render here with
+ *     no scheme attribute at all — every colour variable resolving to its light
+ *     value regardless of the user's preference.
  *
  * ## Why this file duplicates instead of reusing
  *
  * It deliberately imports **nothing** — not `globals.css`, not `ErrorState`, not
- * HeroUI, not next-intl. This is the page that has to work when the app is
+ * Mantine, not next-intl. This is the page that has to work when the app is
  * broken, so every import is a way for it to break too: a crash originating in
- * the stylesheet, in a HeroUI component, or in the i18n request config would
- * take the error page down with it and leave the user on a blank screen. Inline
- * styles and hardcoded text can't fail that way.
+ * the stylesheet, in a Mantine component (which needs `MantineProvider`, i.e. a
+ * provider tree that just failed), or in the i18n request config would take the
+ * error page down with it and leave the user on a blank screen. Inline styles and
+ * hardcoded text can't fail that way.
  *
  * That's also why the copy is bilingual and hardcoded. Translations live behind
  * `NextIntlClientProvider`, which is inside the layout that failed, so there is

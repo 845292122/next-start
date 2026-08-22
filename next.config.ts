@@ -51,6 +51,26 @@ const nextConfig: NextConfig = {
 	 */
 	output: process.env.NEXT_OUTPUT === 'standalone' ? 'standalone' : undefined,
 
+	experimental: {
+		/**
+		 * Rewrites `import { Button } from '@mantine/core'` into per-module imports
+		 * so a page pulls in only what it uses.
+		 *
+		 * Not cosmetic for these three packages: they are barrel files with
+		 * hundreds of re-exports (`@phosphor-icons/react` alone has ~9000), and
+		 * without this every module that imports one icon makes the compiler walk
+		 * the whole barrel on every dev rebuild. Next optimizes a fixed list of
+		 * libraries by default — `@tabler/icons-react` is on it, Phosphor and
+		 * Mantine are not, hence this entry. See
+		 * node_modules/next/dist/docs/01-app/03-api-reference/05-config/01-next-config-js/optimizePackageImports.md.
+		 */
+		optimizePackageImports: [
+			'@mantine/core',
+			'@mantine/hooks',
+			'@phosphor-icons/react',
+		],
+	},
+
 	/**
 	 * The fixed-value security headers. The Content-Security-Policy is *not* here —
 	 * it needs a per-request nonce, so `src/proxy.ts` sets it.

@@ -1,38 +1,34 @@
-import { buttonVariants, Heading, Paragraph } from '@heroui/react'
-import { Lock } from 'lucide-react'
+import { Center, Stack, Text, ThemeIcon, Title } from '@mantine/core'
+import { LockIcon } from '@phosphor-icons/react/ssr'
 import { getTranslations } from 'next-intl/server'
-import { Link } from '@/i18n/navigation'
+import { ButtonLink } from '@/components/ui/ButtonLink'
 
 /**
  * Nothing redirects here yet: the (app) layout's guard covers "not signed in",
- * and there is no role model to fail. This is the page a role check should send
- * an authenticated-but-unauthorized user to.
+ * and there is no role model to fail. This is the page a role check should send an
+ * authenticated-but-unauthorized user to.
+ *
+ * Icons from `@phosphor-icons/react/ssr` — see the note in [locale]/not-found.tsx.
  */
 export default async function NoPermission() {
 	const t = await getTranslations('Errors')
 
 	return (
-		<div className="flex min-h-[60vh] items-center justify-center p-6">
-			<div className="flex max-w-100 flex-col items-center gap-4 text-center">
-				<div className="bg-danger-soft text-danger-soft-foreground flex size-18 items-center justify-center rounded-full">
-					<Lock className="size-9" />
-				</div>
-				<Heading level={1}>403</Heading>
-				<Paragraph className="text-muted">{t('forbidden')}</Paragraph>
+		<Center mih="60vh" p="lg">
+			<Stack align="center" gap="md" maw={400} ta="center">
+				<ThemeIcon color="red" variant="light" size={72} radius="xl">
+					<LockIcon size={36} />
+				</ThemeIcon>
+				<Title order={1}>403</Title>
+				<Text c="dimmed">{t('forbidden')}</Text>
 				{/*
-				 * HeroUI's Button is a <button> and takes no href — buttonVariants() is
-				 * the escape hatch for giving something else the same look. The Link has
-				 * to be the locale-aware one from @/i18n/navigation, and it prefetches,
-				 * which react-aria's own Link would not.
+				 * A Client Component wrapper, because `component={Link}` can't be
+				 * written from a Server Component — see components/ui/ButtonLink.tsx.
 				 */}
-				<Link
-					href="/"
-					replace
-					className={buttonVariants({ variant: 'secondary' })}
-				>
+				<ButtonLink href="/" replace variant="default">
 					{t('backHome')}
-				</Link>
-			</div>
-		</div>
+				</ButtonLink>
+			</Stack>
+		</Center>
 	)
 }

@@ -69,8 +69,13 @@ test('signing out asks for confirmation first', async ({ page }) => {
 
 	// Cancelling has to leave the session alone — a confirm dialog that signs you
 	// out anyway is worse than no dialog.
+	//
+	// role="dialog", not "alertdialog": Mantine's Modal has no alertdialog variant
+	// (see components/ui/sign-out-button.tsx). What matters for this test is
+	// unchanged — the modal is labelled, traps focus, and the two buttons are
+	// scoped to it.
 	await railSignOut.click()
-	const dialog = page.getByRole('alertdialog')
+	const dialog = page.getByRole('dialog')
 	await expect(dialog).toBeVisible()
 	await dialog.getByRole('button', { name: '取消' }).click()
 	await expect(dialog).toBeHidden()
@@ -79,7 +84,7 @@ test('signing out asks for confirmation first', async ({ page }) => {
 	// Confirming does.
 	await railSignOut.click()
 	await page
-		.getByRole('alertdialog')
+		.getByRole('dialog')
 		.getByRole('button', { name: '确认退出' })
 		.click()
 	await expect(page).toHaveURL(/\/login$/)

@@ -2,23 +2,34 @@
 
 import {
 	Alert,
+	Badge,
+	Box,
 	Button,
 	Card,
-	Chip,
 	Code,
-	Input,
-	Label,
-	ProgressBar,
-	Separator,
+	Container,
+	Divider,
+	Group,
+	Progress,
+	SegmentedControl,
+	SimpleGrid,
 	Slider,
+	Stack,
 	Switch,
-	TextField,
-	ToggleButton,
-	ToggleButtonGroup,
+	Text,
+	TextInput,
+	Title,
 	Tooltip,
-	toast,
-} from '@heroui/react'
-import { Bell, Info, Layers, Palette, Zap } from 'lucide-react'
+} from '@mantine/core'
+import { notifications } from '@mantine/notifications'
+import {
+	BellIcon,
+	type Icon,
+	InfoIcon,
+	LightningIcon,
+	PaletteIcon,
+	StackIcon,
+} from '@phosphor-icons/react'
 import { useTranslations } from 'next-intl'
 import { useState } from 'react'
 
@@ -26,36 +37,40 @@ import { useState } from 'react'
  * Dashboard — doubles as living documentation for the design system. Delete the
  * whole page when real features land; nothing else depends on it.
  *
- * Layout is plain Tailwind flex/grid: HeroUI has no layout components and no
- * size props, unlike Mantine's Stack/Group/SimpleGrid.
+ * Layout is Mantine's own: `Stack` / `Group` / `SimpleGrid` and the size props on
+ * each component. There are no utility classes anywhere in this project.
  */
 
 function StatCard({
 	label,
 	value,
 	hint,
-	icon: Icon,
+	icon: StatIcon,
 }: {
 	label: string
 	value: string
 	hint: string
-	icon: typeof Zap
+	icon: Icon
 }) {
 	return (
-		<Card>
-			<Card.Content className="p-6">
-				<div className="mb-2 flex items-start justify-between">
-					<span className="text-muted text-sm font-semibold">{label}</span>
-					<Icon className="text-accent size-4.5" />
-				</div>
-				<p className="text-[28px] leading-tight font-bold">{value}</p>
-				<p className="text-muted mt-1 text-xs">{hint}</p>
-			</Card.Content>
+		<Card withBorder padding="lg" radius="md">
+			<Group justify="space-between" align="flex-start" mb="xs">
+				<Text size="sm" fw={600} c="dimmed">
+					{label}
+				</Text>
+				<StatIcon size={18} color="var(--mantine-primary-color-filled)" />
+			</Group>
+			<Text fz={28} fw={700} lh={1.2}>
+				{value}
+			</Text>
+			<Text size="xs" c="dimmed" mt={4}>
+				{hint}
+			</Text>
 		</Card>
 	)
 }
 
-/** Section shell: title + note + separator */
+/** Section shell: title + note + divider. */
 function Section({
 	title,
 	note,
@@ -66,55 +81,31 @@ function Section({
 	children: React.ReactNode
 }) {
 	return (
-		<Card className="h-full">
-			<Card.Content className="p-6">
-				<p className="font-semibold">{title}</p>
-				<p className="text-muted text-xs">{note}</p>
-				<Separator className="my-4" />
-				{children}
-			</Card.Content>
+		<Card withBorder padding="lg" radius="md" h="100%">
+			<Text fw={600}>{title}</Text>
+			<Text size="xs" c="dimmed">
+				{note}
+			</Text>
+			<Divider my="md" />
+			{children}
 		</Card>
 	)
 }
 
 /**
- * HeroUI's semantic color roles. Each one is a CSS variable trio — base, its
- * readable foreground, and a low-emphasis `-soft` pair — so a theme changes all
- * of them at once. This is the counterpart to Mantine's 10-step numeric scales.
+ * A Mantine colour is a 10-step scale, and every component variant is derived from
+ * it — this is the counterpart to a semantic-token system where each role is a
+ * separate variable. `theme.primaryColor` decides which scale the whole UI leans
+ * on.
  */
-const ROLES = [
-	{
-		key: 'accent',
-		solid: 'bg-accent text-accent-foreground',
-		soft: 'bg-accent-soft text-accent-soft-foreground',
-	},
-	{
-		key: 'default',
-		solid: 'bg-default text-default-foreground',
-		soft: 'bg-default-soft text-default-soft-foreground',
-	},
-	{
-		key: 'success',
-		solid: 'bg-success text-success-foreground',
-		soft: 'bg-success-soft text-success-soft-foreground',
-	},
-	{
-		key: 'warning',
-		solid: 'bg-warning text-warning-foreground',
-		soft: 'bg-warning-soft text-warning-soft-foreground',
-	},
-	{
-		key: 'danger',
-		solid: 'bg-danger text-danger-foreground',
-		soft: 'bg-danger-soft text-danger-soft-foreground',
-	},
-] as const
+const SHADES = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] as const
 
-const SURFACES = [
-	{ key: 'surface', className: 'bg-surface' },
-	{ key: 'surface-secondary', className: 'bg-surface-secondary' },
-	{ key: 'surface-tertiary', className: 'bg-surface-tertiary' },
-] as const
+/**
+ * The colours this app uses for meaning. Mantine ships no `success` / `danger`
+ * aliases: you pick scales and use them consistently, so the mapping lives in one
+ * place like this rather than being re-decided per component.
+ */
+const ROLES = ['blue', 'teal', 'yellow', 'red', 'gray'] as const
 
 export default function Dashboard() {
 	const t = useTranslations('Dashboard')
@@ -123,246 +114,271 @@ export default function Dashboard() {
 	const [volume, setVolume] = useState(40)
 
 	return (
-		<div className="mx-auto max-w-290 p-4 md:p-8">
+		<Container size="xl" py={{ base: 'md', sm: 'xl' }}>
 			{/* Header */}
-			<div className="mb-8 flex flex-col gap-1">
-				<p className="text-accent text-sm font-semibold">{t('eyebrow')}</p>
-				<h1 className="text-3xl font-bold">{t('title')}</h1>
-				<p className="text-muted max-w-136">
+			<Stack gap={4} mb="xl">
+				<Text size="sm" fw={600} c="var(--mantine-primary-color-filled)">
+					{t('eyebrow')}
+				</Text>
+				<Title order={1} fz={30}>
+					{t('title')}
+				</Title>
+				<Text c="dimmed" maw={560}>
 					{/* t.rich, not t: the message wraps the file path in <code> */}
 					{t.rich('description', {
 						code: (chunks) => <Code>{chunks}</Code>,
 					})}
-				</p>
-			</div>
+				</Text>
+			</Stack>
 
-			<div className="flex flex-col gap-4">
+			<Stack gap="md">
 				{/* Stat cards */}
-				<div className="grid gap-4 md:grid-cols-3">
+				<SimpleGrid cols={{ base: 1, sm: 3 }} spacing="md">
 					<StatCard
 						label={t('stats.layout.label')}
 						value={t('stats.layout.value')}
 						hint={t('stats.layout.hint')}
-						icon={Layers}
+						icon={StackIcon}
 					/>
 					<StatCard
 						label={t('stats.theme.label')}
 						value={t('stats.theme.value')}
 						hint={t('stats.theme.hint')}
-						icon={Palette}
+						icon={PaletteIcon}
 					/>
 					<StatCard
 						label={t('stats.platform.label')}
 						value={t('stats.platform.value')}
 						hint={t('stats.platform.hint')}
-						icon={Zap}
+						icon={LightningIcon}
 					/>
-				</div>
+				</SimpleGrid>
 
-				{/* Semantic color roles */}
+				{/* Colour scales */}
 				<Section title={t('palette.title')} note={t('palette.note')}>
-					<div className="flex flex-col gap-4">
-						<div className="grid gap-2 sm:grid-cols-5">
-							{ROLES.map((role) => (
-								<div key={role.key} className="flex flex-col gap-1">
-									<div
-										className={`${role.solid} flex h-14 items-center justify-center rounded-lg text-xs font-medium`}
-									>
-										{role.key}
-									</div>
-									<div
-										className={`${role.soft} flex h-9 items-center justify-center rounded-lg text-xs`}
-									>
-										soft
-									</div>
-								</div>
-							))}
-						</div>
-						<div className="grid gap-2 sm:grid-cols-3">
-							{SURFACES.map((surface) => (
-								<div
-									key={surface.key}
-									className={`${surface.className} border-border flex h-12 items-center justify-center rounded-lg border font-mono text-xs`}
+					<Stack gap="md">
+						<Group gap={0} wrap="nowrap">
+							{SHADES.map((shade) => (
+								<Box
+									key={shade}
+									flex={1}
+									h={44}
+									bg={`var(--mantine-primary-color-${shade})`}
+									// The scale reads left-to-right as light→dark, so the label
+									// has to flip contrast halfway or the last swatches go
+									// unreadable. 4 is Mantine's own crossover point.
+									c={shade > 4 ? 'white' : 'black'}
+									fz={10}
+									ta="center"
+									style={{ lineHeight: '44px' }}
 								>
-									{surface.key}
-								</div>
+									{shade}
+								</Box>
 							))}
-						</div>
-					</div>
+						</Group>
+						<SimpleGrid cols={{ base: 2, sm: 5 }} spacing="xs">
+							{ROLES.map((role) => (
+								/*
+								 * The `light` pair rather than `filled` + a hand-picked
+								 * foreground: each scale ships `-light` with a matching
+								 * `-light-color`, so one variable pair covers both schemes and
+								 * no swatch needs a contrast decision here. Two of these pairs
+								 * are adjusted in the theme's `cssVariablesResolver` because
+								 * Mantine's own values don't clear WCAG AA — the note there has
+								 * the measurements.
+								 */
+								<Box
+									key={role}
+									h={44}
+									bg={`var(--mantine-color-${role}-light)`}
+									c={`var(--mantine-color-${role}-light-color)`}
+									fz="xs"
+									fw={500}
+									display="flex"
+									style={{
+										alignItems: 'center',
+										justifyContent: 'center',
+										borderRadius: 'var(--mantine-radius-md)',
+									}}
+								>
+									{role}
+								</Box>
+							))}
+						</SimpleGrid>
+					</Stack>
 				</Section>
 
-				<div className="grid gap-4 md:grid-cols-2">
+				<SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
 					{/* Buttons */}
 					<Section title={t('buttons.title')} note={t('buttons.note')}>
-						<div className="flex flex-col gap-3">
-							<div className="flex flex-wrap gap-2">
-								<Button size="sm">Primary</Button>
-								<Button size="sm" variant="secondary">
-									Secondary
+						<Stack gap="sm">
+							<Group gap="xs">
+								<Button size="xs">Filled</Button>
+								<Button size="xs" variant="light">
+									Light
 								</Button>
-								<Button size="sm" variant="tertiary">
-									Tertiary
-								</Button>
-							</div>
-							<div className="flex flex-wrap gap-2">
-								<Button size="sm" variant="outline">
+								<Button size="xs" variant="outline">
 									Outline
 								</Button>
-								<Button size="sm" variant="ghost">
-									Ghost
+							</Group>
+							<Group gap="xs">
+								<Button size="xs" variant="subtle">
+									Subtle
 								</Button>
-								<Button size="sm" variant="danger">
+								<Button size="xs" variant="default">
+									Default
+								</Button>
+								<Button size="xs" color="red">
 									Danger
 								</Button>
-								<Button size="sm" isDisabled>
+								<Button size="xs" disabled>
 									Disabled
 								</Button>
-							</div>
-						</div>
+							</Group>
+						</Stack>
 					</Section>
 
-					{/* Chips and toasts */}
+					{/* Badges and notifications */}
 					<Section title={t('chips.title')} note={t('chips.note')}>
-						<div className="flex flex-col gap-4">
-							<div className="flex flex-wrap items-center gap-2">
-								<Chip>{t('chips.default')}</Chip>
-								<Chip color="success">{t('chips.live')}</Chip>
-								<Chip color="danger" variant="soft">
+						<Stack gap="md">
+							<Group gap="xs">
+								<Badge>{t('chips.default')}</Badge>
+								<Badge color="teal">{t('chips.live')}</Badge>
+								<Badge color="red" variant="light">
 									{t('chips.buildFailed')}
-								</Chip>
-								<Chip color="warning" variant="soft">
+								</Badge>
+								<Badge color="yellow" variant="light">
 									{t('chips.archived')}
-								</Chip>
-							</div>
-							<div className="flex flex-wrap gap-2">
+								</Badge>
+							</Group>
+							<Group gap="xs">
 								<Button
-									size="sm"
-									variant="secondary"
-									onPress={() => toast.success(t('chips.toastSuccess'))}
+									size="xs"
+									variant="light"
+									leftSection={<BellIcon size={16} />}
+									onClick={() =>
+										notifications.show({
+											color: 'teal',
+											message: t('chips.toastSuccess'),
+										})
+									}
 								>
-									<Bell className="size-4" />
 									{t('chips.toastTrigger')}
 								</Button>
 								<Button
-									size="sm"
-									variant="danger-soft"
-									onPress={() => toast.danger(t('chips.toastDanger'))}
+									size="xs"
+									variant="light"
+									color="red"
+									onClick={() =>
+										notifications.show({
+											color: 'red',
+											message: t('chips.toastDanger'),
+										})
+									}
 								>
 									{t('chips.toastDangerTrigger')}
 								</Button>
-							</div>
-						</div>
+							</Group>
+						</Stack>
 					</Section>
-				</div>
+				</SimpleGrid>
 
-				<div className="grid gap-4 md:grid-cols-2">
+				<SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
 					{/* Form controls */}
 					<Section title={t('form.title')} note={t('form.note')}>
-						<div className="flex flex-col gap-4">
-							<TextField defaultValue="acme-console">
-								<Label>{t('form.projectName')}</Label>
-								<Input placeholder="acme-console" />
-							</TextField>
-							<TextField>
-								<Label>{t('form.remark')}</Label>
-								<Input placeholder={t('form.remarkPlaceholder')} />
-							</TextField>
-							<Switch isSelected={notify} onChange={setNotify}>
-								<Switch.Control>
-									<Switch.Thumb />
-								</Switch.Control>
-								<Switch.Content>{t('form.notify')}</Switch.Content>
-							</Switch>
-						</div>
+						<Stack gap="md">
+							<TextInput
+								label={t('form.projectName')}
+								defaultValue="acme-console"
+								placeholder="acme-console"
+							/>
+							<TextInput
+								label={t('form.remark')}
+								placeholder={t('form.remarkPlaceholder')}
+							/>
+							<Switch
+								label={t('form.notify')}
+								checked={notify}
+								onChange={(event) => setNotify(event.currentTarget.checked)}
+							/>
+						</Stack>
 					</Section>
 
 					{/* Selection and progress */}
 					<Section title={t('controls.title')} note={t('controls.note')}>
-						<div className="flex flex-col gap-6">
-							<ToggleButtonGroup
-								fullWidth
-								selectionMode="single"
-								disallowEmptySelection
-								selectedKeys={new Set([density])}
-								onSelectionChange={(keys) => {
-									const [next] = [...keys]
-									if (next) setDensity(String(next))
-								}}
-							>
-								<ToggleButton id="compact">
-									{t('controls.compact')}
-								</ToggleButton>
-								<ToggleButton id="comfortable">
-									{t('controls.comfortable')}
-								</ToggleButton>
-								<ToggleButton id="spacious">
-									{t('controls.spacious')}
-								</ToggleButton>
-							</ToggleButtonGroup>
-
-							<Slider
-								value={volume}
-								onChange={(value) => setVolume(value as number)}
-								aria-label={t('controls.volumeLabel')}
-							>
-								<p className="mb-2 text-sm">
-									{t('controls.volume', { value: volume })}
-								</p>
-								<Slider.Track>
-									<Slider.Fill />
-									<Slider.Thumb />
-								</Slider.Track>
-							</Slider>
-
+						<Stack gap="lg">
 							{/*
-							 * aria-label as well as the visible <p>: a paragraph is not a
-							 * label element, so nothing associates it with the progressbar and
-							 * a screen reader announces an unnamed one. Caught by
-							 * e2e/a11y.e2e.ts (aria-progressbar-name).
+							 * One component with a `data` array, where the react-aria original
+							 * needed a group plus one child per option and a Set for the
+							 * selection. Renders as a radiogroup.
 							 */}
-							<ProgressBar value={72} aria-label={t('controls.buildProgress')}>
-								<p className="mb-2 text-sm">{t('controls.buildProgress')}</p>
-								<ProgressBar.Track>
-									<ProgressBar.Fill />
-								</ProgressBar.Track>
-							</ProgressBar>
-						</div>
+							<SegmentedControl
+								fullWidth
+								value={density}
+								onChange={setDensity}
+								data={[
+									{ value: 'compact', label: t('controls.compact') },
+									{ value: 'comfortable', label: t('controls.comfortable') },
+									{ value: 'spacious', label: t('controls.spacious') },
+								]}
+							/>
+
+							<div>
+								<Text size="sm" mb="xs">
+									{t('controls.volume', { value: volume })}
+								</Text>
+								{/*
+								 * thumbLabel, not aria-label: the thumb is the element carrying
+								 * role="slider", so that's where the accessible name has to
+								 * land. Caught by e2e/a11y.e2e.ts otherwise.
+								 */}
+								<Slider
+									value={volume}
+									onChange={setVolume}
+									thumbLabel={t('controls.volumeLabel')}
+								/>
+							</div>
+
+							<div>
+								<Text size="sm" mb="xs">
+									{t('controls.buildProgress')}
+								</Text>
+								{/* Same reasoning: Progress forwards aria-label to its inner
+								    section, which is what has role="progressbar". */}
+								<Progress value={72} aria-label={t('controls.buildProgress')} />
+							</div>
+						</Stack>
 					</Section>
-				</div>
+				</SimpleGrid>
 
 				{/* Alerts and tooltips */}
 				<Section title={t('surfaces.title')} note={t('surfaces.note')}>
-					<div className="flex flex-col gap-4">
-						{(
-							['default', 'accent', 'success', 'warning', 'danger'] as const
-						).map((status) => (
-							<Alert key={status} status={status}>
-								<Alert.Indicator>
-									<Info className="size-4.5" />
-								</Alert.Indicator>
-								<Alert.Content>
-									<Alert.Title>
-										{t('surfaces.alertTitle', { status })}
-									</Alert.Title>
-									<Alert.Description>
-										{t('surfaces.alertBody')}
-									</Alert.Description>
-								</Alert.Content>
+					<Stack gap="md">
+						{ROLES.map((role) => (
+							<Alert
+								key={role}
+								color={role}
+								variant="light"
+								icon={<InfoIcon size={18} />}
+								title={t('surfaces.alertTitle', { status: role })}
+							>
+								{t('surfaces.alertBody')}
 							</Alert>
 						))}
-						<div className="flex gap-2">
-							<Tooltip delay={200}>
-								<Button size="sm" variant="outline">
+						<Group gap="xs">
+							<Tooltip
+								label={t('surfaces.tooltipBody')}
+								withArrow
+								openDelay={200}
+							>
+								<Button size="xs" variant="outline">
 									{t('surfaces.tooltipTrigger')}
 								</Button>
-								<Tooltip.Content showArrow>
-									{t('surfaces.tooltipBody')}
-								</Tooltip.Content>
 							</Tooltip>
-						</div>
-					</div>
+						</Group>
+					</Stack>
 				</Section>
-			</div>
-		</div>
+			</Stack>
+		</Container>
 	)
 }

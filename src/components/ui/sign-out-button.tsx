@@ -1,67 +1,63 @@
 'use client'
 
-import { AlertDialog, Button, Tooltip } from '@heroui/react'
-import { LogOut } from 'lucide-react'
+import { ActionIcon, Button, Group, Modal, Text, Tooltip } from '@mantine/core'
+import { useDisclosure } from '@mantine/hooks'
+import { SignOutIcon } from '@phosphor-icons/react'
 import { signOut } from 'next-auth/react'
 import { useTranslations } from 'next-intl'
 
 /**
- * The rail's sign-out control: an icon button that asks for confirmation
- * before ending the session.
+ * The rail's sign-out control: an icon button that asks for confirmation before
+ * ending the session.
  *
- * AlertDialog rather than Modal — react-aria gives it `role="alertdialog"` and
- * moves focus to it on open, which is the right semantics for a destructive
- * confirmation.
+ * A `Modal` with an explicit title, which is what gives it `aria-labelledby` and
+ * moves focus inside on open. Mantine has no `role="alertdialog"` variant — the
+ * distinction buys little here, since the destructive action is a labelled button
+ * inside a modal the user just opened, and `alertdialog` mainly matters for alerts
+ * the *app* raises unprompted.
  */
 export function SignOutButton() {
 	const t = useTranslations('Account')
+	const [opened, { open, close }] = useDisclosure(false)
 
 	return (
-		<AlertDialog>
-			{/*
-			 * A styled Button rather than AlertDialog.Trigger: that component
-			 * renders a plain div, so it would carry no button semantics and no
-			 * keyboard activation. HeroUI's Button is built on the react-aria
-			 * primitive the dialog looks for, so it still opens it.
-			 */}
-			<Tooltip delay={300}>
-				<Button variant="ghost" isIconOnly aria-label={t('signOut')}>
-					<LogOut className="size-4.5" />
-				</Button>
-				<Tooltip.Content placement="right">{t('signOut')}</Tooltip.Content>
+		<>
+			<Tooltip label={t('signOut')} position="right" openDelay={300}>
+				<ActionIcon
+					variant="subtle"
+					color="gray"
+					size="lg"
+					aria-label={t('signOut')}
+					onClick={open}
+				>
+					<SignOutIcon size={18} />
+				</ActionIcon>
 			</Tooltip>
 
-			<AlertDialog.Backdrop>
-				<AlertDialog.Container size="sm">
-					<AlertDialog.Dialog>
-						<AlertDialog.Header>
-							<AlertDialog.Heading>{t('signOutTitle')}</AlertDialog.Heading>
-						</AlertDialog.Header>
-						<AlertDialog.Body>{t('signOutBody')}</AlertDialog.Body>
-						<AlertDialog.Footer>
-							{/*
-							 * slot="close" rather than AlertDialog.CloseTrigger: that
-							 * component renders HeroUI's small "×" icon button, not a
-							 * labelled one, and nesting a Button inside it leaves the
-							 * dialog open because the inner button swallows the press.
-							 * react-aria closes the dialog for any button carrying this
-							 * slot, so a normal Button is all that's needed.
-							 */}
-							<Button variant="ghost" slot="close">
-								{t('cancel')}
-							</Button>
-							<Button
-								variant="danger"
-								// redirectTo is unprefixed on purpose — the proxy resolves it
-								// to the active locale.
-								onPress={() => signOut({ redirectTo: '/login' })}
-							>
-								{t('signOutConfirm')}
-							</Button>
-						</AlertDialog.Footer>
-					</AlertDialog.Dialog>
-				</AlertDialog.Container>
-			</AlertDialog.Backdrop>
-		</AlertDialog>
+			<Modal
+				opened={opened}
+				onClose={close}
+				title={t('signOutTitle')}
+				size="sm"
+				centered
+			>
+				<Text size="sm" c="dimmed">
+					{t('signOutBody')}
+				</Text>
+				<Group justify="flex-end" mt="lg">
+					<Button variant="default" onClick={close}>
+						{t('cancel')}
+					</Button>
+					<Button
+						color="red"
+						// redirectTo is unprefixed on purpose — the proxy resolves it to the
+						// active locale.
+						onClick={() => signOut({ redirectTo: '/login' })}
+					>
+						{t('signOutConfirm')}
+					</Button>
+				</Group>
+			</Modal>
+		</>
 	)
 }

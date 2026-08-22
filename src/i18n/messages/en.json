@@ -30,9 +30,9 @@
 		"en": "English"
 	},
 	"Dashboard": {
-		"eyebrow": "HeroUI · semantic design tokens",
+		"eyebrow": "Mantine · theme and components",
 		"title": "Design system at a glance",
-		"description": "This page lays out the theme's semantic colors and the components in common use. A HeroUI theme is just a set of CSS variables — edit the ones in <code>src/app/globals.css</code> and every component follows.",
+		"description": "This page lays out the theme's color scales and the components in common use. A Mantine theme is a plain JS object — edit <code>src/components/providers/theme.ts</code> and every component follows.",
 		"stats": {
 			"layout": {
 				"label": "Layout",
@@ -51,16 +51,16 @@
 			}
 		},
 		"palette": {
-			"title": "Semantic color roles",
-			"note": "Each role is a set of variables: a base, a readable foreground, and a low-emphasis soft pair. Retheming means editing variables, not components"
+			"title": "Colors and scales",
+			"note": "Every Mantine color is a 10-step scale, and component variants are derived from it; theme.primaryColor decides which scale the whole UI leans on"
 		},
 		"buttons": {
 			"title": "Buttons",
-			"note": "HeroUI's variant system: primary / secondary / tertiary / outline / ghost / danger"
+			"note": "Mantine's variant system: filled / light / outline / subtle / default, with the color chosen separately"
 		},
 		"chips": {
 			"title": "Chips and messages",
-			"note": "Chip is the status label (HeroUI's Badge is an overlay indicator, not a label); toast replaces the notifications component",
+			"note": "Badge is the status label; notifications.show() replaces toast, provided a Notifications component is mounted",
 			"default": "Default",
 			"live": "Live",
 			"buildFailed": "Build failed",
@@ -72,7 +72,7 @@
 		},
 		"form": {
 			"title": "Form controls",
-			"note": "TextField composes Label / Input / FieldError; the focus ring uses the accent color",
+			"note": "TextInput ships label / description / error slots, so there's nothing to compose by hand",
 			"projectName": "Project name",
 			"remark": "Note",
 			"remarkPlaceholder": "Optional",
@@ -80,7 +80,7 @@
 		},
 		"controls": {
 			"title": "Selection and progress",
-			"note": "ToggleButtonGroup / Slider / ProgressBar — all compound components",
+			"note": "SegmentedControl / Slider / Progress — a data array is enough, no child component per option",
 			"compact": "Compact",
 			"comfortable": "Comfortable",
 			"spacious": "Spacious",
@@ -90,16 +90,16 @@
 		},
 		"surfaces": {
 			"title": "Alerts and overlays",
-			"note": "Alert's semantic status colors, plus Tooltip",
+			"note": "Alert's semantic colors, plus Tooltip",
 			"alertTitle": "This is a {status} alert",
-			"alertBody": "Alert colors come from the semantic variables, so retheming doesn't touch this.",
+			"alertBody": "Alert colors come from whichever scale `color` names, so retheming doesn't touch this.",
 			"tooltipTrigger": "Hover for a tooltip",
-			"tooltipBody": "Tooltips are driven by react-aria, so keyboard focus opens them too"
+			"tooltipBody": "Tooltips are driven by floating-ui and open on hover by default"
 		}
 	},
 	"Notes": {
 		"title": "Notes",
-		"description": "The template's one complete example: SQLite table → drizzle service → Server Actions (search and optimistic updates included) → HeroUI UI. Delete the whole domain if you don't need it.",
+		"description": "The template's one end-to-end example: SQLite table → drizzle service → Server Actions (search and optimistic updates included) → Mantine UI. Delete the whole domain if you don't need it.",
 		"titleLabel": "Title",
 		"titlePlaceholder": "What do you want to remember?",
 		"bodyLabel": "Body",
@@ -119,7 +119,8 @@
 		"emptyHint": "Add your first one with the form above.",
 		"noResults": "No matching notes",
 		"loadMore": "Load more ({remaining, number} left)",
-		"noResultsHint": "Try a different keyword."
+		"noResultsHint": "Try a different keyword.",
+		"searchClear": "Clear search"
 	},
 	"Settings": {
 		"title": "Settings",
@@ -166,7 +167,7 @@
 		"brand": "NEXT START",
 		"tabPrimary": "Get Started",
 		"tabSecondary": "Sample Code",
-		"cardBody": "A ready-made full-stack skeleton: HeroUI + Drizzle/SQLite + Auth.js + next-intl. Delete the sample business logic and what's left is your new project.",
+		"cardBody": "A ready-made full-stack skeleton: Mantine + Drizzle/SQLite + Auth.js + next-intl. Delete the sample business logic and what's left is your new project.",
 		"tagAuth": "Auth",
 		"tagDb": "Database",
 		"tagI18n": "i18n",

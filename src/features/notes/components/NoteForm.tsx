@@ -1,53 +1,58 @@
 'use client'
 
-import {
-	Button,
-	FieldError,
-	Form,
-	Input,
-	Label,
-	TextArea,
-	TextField,
-	toast,
-} from '@heroui/react'
-import { zodResolver } from '@hookform/resolvers/zod'
-import { Plus } from 'lucide-react'
+import { Button, Stack, Textarea, TextInput } from '@mantine/core'
+import { type FormErrors, schemaResolver, useForm } from '@mantine/form'
+import { notifications } from '@mantine/notifications'
+import { PlusIcon } from '@phosphor-icons/react'
 import { useTranslations } from 'next-intl'
-import { useForm } from 'react-hook-form'
 import { useSWRConfig } from 'swr'
 import { createNoteAction } from '@/features/notes/actions'
 import {
-	type CreateNoteInput,
 	type CreateNoteValues,
 	createNoteSchema,
 } from '@/features/notes/schema'
 import { notesKeyFilter } from '@/features/notes/swr-keys'
 import { useActionErrorMessage } from '@/lib/action-error'
 
+/** See the note in features/auth/components/LoginForm.tsx on `{ sync: true }`. */
+const resolveCreateNote = schemaResolver(createNoteSchema, { sync: true })
+
+/**
+ * Which message belongs to which field — for both the client-side schema run and
+ * the server's `fields` reply, because they name the same fields.
+ *
+ * The schema carries no locale text (see core/auth/schema.ts), so the wording has
+ * to be looked up by field name. Spelled out as a literal map so next-intl
+ * typechecks the keys.
+ */
+const FIELD_MESSAGE = {
+	title: 'titleInvalid',
+	body: 'bodyInvalid',
+} as const satisfies Record<keyof CreateNoteValues, string>
+
 /**
  * The reference implementation for consuming `ActionResult` in a form: a failure
- * that names fields lands on those fields, and everything else becomes a toast.
+ * that names fields lands on those fields, and everything else becomes a
+ * notification.
  */
 export function NoteForm() {
 	const t = useTranslations('Notes')
 	const { mutate } = useSWRConfig()
 	const errorMessage = useActionErrorMessage()
 
-	// Three generics, not one: `body` has a zod .default(''), so the schema's
-	// input type (body optional) and output type (body always a string) differ,
-	// and useForm has to be told both or the resolver won't line up.
-	const {
-		register,
-		handleSubmit,
-		reset,
-		setError,
-		formState: { errors, isSubmitting },
-	} = useForm<CreateNoteValues, unknown, CreateNoteInput>({
-		resolver: zodResolver(createNoteSchema),
-		defaultValues: { title: '', body: '' },
+	const form = useForm<CreateNoteValues>({
+		mode: 'uncontrolled',
+		initialValues: { title: '', body: '' },
+		validate: (values): FormErrors =>
+			Object.fromEntries(
+				Object.keys(resolveCreateNote(values)).map((field) => [
+					field,
+					t(FIELD_MESSAGE[field as keyof CreateNoteValues]),
+				]),
+			),
 	})
 
-	const onSubmit = handleSubmit(async (values) => {
+	const onSubmit = form.onSubmit(async (values) => {
 		// Two distinct failure modes, hence both a result check and a catch:
 		// `createNoteAction` reports *expected* failures as `{ ok: false }` (see
 		// core/action-result.ts), while a dead network or a crashed server still
@@ -56,71 +61,69 @@ export function NoteForm() {
 		try {
 			result = await createNoteAction(values)
 		} catch {
-			toast.danger(t('createFailed'))
+			notifications.show({ color: 'red', message: t('createFailed') })
 			return
 		}
 
 		if (!result.ok) {
-			// A failure carrying field names belongs on those fields, not in a toast
-			// — `fields` exists precisely so the server can say *where* without
-			// sending untranslatable text (see core/action-result.ts).
+			// A failure carrying field names belongs on those fields, not in a
+			// notification — `fields` exists precisely so the server can say *where*
+			// without sending untranslatable text (see core/action-result.ts).
 			//
 			// Reaching this in practice means the request was tampered with or the
 			// schema drifted, because the same schema already ran client-side through
-			// zodResolver. It's the defence-in-depth path, not the everyday one.
+			// the resolver above. It's the defence-in-depth path, not the everyday one.
 			if (result.fields?.length) {
 				for (const field of result.fields) {
 					if (field === 'title' || field === 'body') {
-						setError(field, { message: t(`${field}Invalid`) })
+						form.setFieldError(field, t(FIELD_MESSAGE[field]))
 					}
 				}
 				return
 			}
 
-			toast.danger(errorMessage(result))
+			notifications.show({ color: 'red', message: errorMessage(result) })
 			return
 		}
 
-		// Revalidate rather than write `result.data` in by hand: the list is sorted
-		// by createdAt and filtered by the search box, so the server is the only
-		// thing that knows where the new note belongs.
+		// Revalidate rather than write `result.data` in by hand: the list is sorted by
+		// createdAt and filtered by the search box, so the server is the only thing
+		// that knows where the new note belongs.
 		//
 		// The *filter*, not notesKey() — a note has to appear in whatever query the
 		// search box currently holds, and that's a different cache key.
 		await mutate(notesKeyFilter)
-		reset()
-		toast.success(t('created'))
+		form.reset()
+		notifications.show({ color: 'teal', message: t('created') })
 	})
 
 	return (
-		<Form onSubmit={onSubmit} className="flex flex-col gap-3">
-			<TextField isInvalid={!!errors.title}>
-				<Label>{t('titleLabel')}</Label>
-				<Input placeholder={t('titlePlaceholder')} {...register('title')} />
-				{/*
-				 * t('titleInvalid'), not errors.title?.message: the message on a
-				 * resolver error is zod's own English string, and schemas in this
-				 * project deliberately carry no locale-specific text (see
-				 * core/auth/schema.ts). Keying off *which* field failed is the same
-				 * approach LoginForm takes.
-				 */}
-				<FieldError>{errors.title && t('titleInvalid')}</FieldError>
-			</TextField>
-
-			<TextField isInvalid={!!errors.body}>
-				<Label>{t('bodyLabel')}</Label>
-				<TextArea
-					rows={3}
-					placeholder={t('bodyPlaceholder')}
-					{...register('body')}
+		<form onSubmit={onSubmit} noValidate>
+			<Stack gap="sm">
+				<TextInput
+					label={t('titleLabel')}
+					placeholder={t('titlePlaceholder')}
+					key={form.key('title')}
+					{...form.getInputProps('title')}
 				/>
-				<FieldError>{errors.body && t('bodyInvalid')}</FieldError>
-			</TextField>
 
-			<Button type="submit" isPending={isSubmitting} className="self-start">
-				<Plus className="size-4" />
-				{t('submit')}
-			</Button>
-		</Form>
+				<Textarea
+					label={t('bodyLabel')}
+					placeholder={t('bodyPlaceholder')}
+					rows={3}
+					key={form.key('body')}
+					{...form.getInputProps('body')}
+				/>
+
+				<Button
+					type="submit"
+					loading={form.submitting}
+					leftSection={<PlusIcon size={16} />}
+					style={{ alignSelf: 'flex-start' }}
+				>
+					{t('submit')}
+				</Button>
+			</Stack>
+		</form>
 	)
 }

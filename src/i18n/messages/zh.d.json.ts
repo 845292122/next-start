@@ -33,9 +33,9 @@ declare const messages: {
 		"en": "English"
 	},
 	"Dashboard": {
-		"eyebrow": "HeroUI · 语义化设计令牌",
+		"eyebrow": "Mantine · 主题与组件",
 		"title": "设计系统一览",
-		"description": "这一页把主题里的语义色、常用组件摆出来。HeroUI 的主题就是一组 CSS 变量，改 <code>src/app/globals.css</code> 里的变量就能看到全部组件跟着变。",
+		"description": "这一页把主题里的色阶和常用组件摆出来。Mantine 的主题是一个 JS 对象，改 <code>src/components/providers/theme.ts</code> 就能看到全部组件跟着变。",
 		"stats": {
 			"layout": {
 				"label": "布局",
@@ -54,16 +54,16 @@ declare const messages: {
 			}
 		},
 		"palette": {
-			"title": "语义色角色",
-			"note": "每个角色是一组变量：底色、可读的前景色，以及低强度的 soft 版本。换主题时改变量，不改组件"
+			"title": "颜色与色阶",
+			"note": "Mantine 的每个颜色都是 0–9 十级色阶，组件的 variant 从色阶推导；theme.primaryColor 决定整套 UI 用哪一组"
 		},
 		"buttons": {
 			"title": "按钮",
-			"note": "HeroUI 的 variant 系统：primary / secondary / tertiary / outline / ghost / danger"
+			"note": "Mantine 的 variant 系统：filled / light / outline / subtle / default，颜色由 color 单独决定"
 		},
 		"chips": {
 			"title": "标签与消息",
-			"note": "Chip 用于状态展示（HeroUI 的 Badge 是角标，不是状态标签）；toast 取代了通知组件",
+			"note": "Badge 用于状态展示；notifications.show() 取代了 toast，前提是挂了一个 Notifications 组件",
 			"default": "默认",
 			"live": "已上线",
 			"buildFailed": "构建失败",
@@ -75,7 +75,7 @@ declare const messages: {
 		},
 		"form": {
 			"title": "表单控件",
-			"note": "TextField 由 Label / Input / FieldError 组合而成，聚焦态用主色",
+			"note": "TextInput 自带 label / description / error 三个槽位，不用自己拼",
 			"projectName": "项目名称",
 			"remark": "备注",
 			"remarkPlaceholder": "可留空",
@@ -83,7 +83,7 @@ declare const messages: {
 		},
 		"controls": {
 			"title": "选择与进度",
-			"note": "ToggleButtonGroup / Slider / ProgressBar，都是复合组件",
+			"note": "SegmentedControl / Slider / Progress，给一个 data 数组就行，不用逐个写子组件",
 			"compact": "紧凑",
 			"comfortable": "适中",
 			"spacious": "宽松",
@@ -93,16 +93,16 @@ declare const messages: {
 		},
 		"surfaces": {
 			"title": "提示与浮层",
-			"note": "Alert 的语义状态色，以及 Tooltip",
+			"note": "Alert 的语义色，以及 Tooltip",
 			"alertTitle": "这是一条 {status} 提示",
-			"alertBody": "Alert 的配色跟着语义变量走，换主题时不用改这里。",
+			"alertBody": "Alert 的配色来自 color 指定的那组色阶，换主题时不用改这里。",
 			"tooltipTrigger": "悬停看提示",
-			"tooltipBody": "Tooltip 由 react-aria 驱动，键盘聚焦时也会出现"
+			"tooltipBody": "Tooltip 由 floating-ui 驱动，默认只在悬停时出现"
 		}
 	},
 	"Notes": {
 		"title": "笔记",
-		"description": "模板自带的完整示例：SQLite 表 → drizzle service → Server Action（连搜索和乐观更新也是）→ HeroUI 界面。不需要的话整个域可以删掉。",
+		"description": "模板自带的完整示例：SQLite 表 → drizzle service → Server Action（连搜索和乐观更新也是）→ Mantine 界面。不需要的话整个域可以删掉。",
 		"titleLabel": "标题",
 		"titlePlaceholder": "想记点什么？",
 		"bodyLabel": "内容",
@@ -122,7 +122,8 @@ declare const messages: {
 		"emptyHint": "用上面的表单添加第一条。",
 		"noResults": "没有匹配的笔记",
 		"loadMore": "还有 {remaining, number} 条，加载更多",
-		"noResultsHint": "换个关键词试试。"
+		"noResultsHint": "换个关键词试试。",
+		"searchClear": "清空搜索"
 	},
 	"Settings": {
 		"title": "设置",
@@ -169,7 +170,7 @@ declare const messages: {
 		"brand": "NEXT START",
 		"tabPrimary": "快速开始",
 		"tabSecondary": "示例代码",
-		"cardBody": "一套现成的全栈骨架：HeroUI + Drizzle/SQLite + Auth.js + next-intl。删掉示例业务，剩下的就是你的新项目。",
+		"cardBody": "一套现成的全栈骨架：Mantine + Drizzle/SQLite + Auth.js + next-intl。删掉示例业务，剩下的就是你的新项目。",
 		"tagAuth": "认证",
 		"tagDb": "数据库",
 		"tagI18n": "国际化",

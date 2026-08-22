@@ -51,28 +51,39 @@ const STATIC_CSP_DIRECTIVES = [
  *
  * ## Why `style-src` isn't nonce-based
  *
- * react-aria — which HeroUI is built on — injects its own stylesheet at runtime
- * for pressable elements (`[data-react-aria-pressable] { touch-action: ... }`).
- * It's a `<style>` element created in the browser, it carries no nonce, and
- * react-aria exposes no way to give it one.
+ * Mantine styles a lot of things through the `style` **attribute** rather than a
+ * class: floating-ui writes every popover, tooltip and menu position there, and so
+ * do `Progress` widths, `Slider` fills and every `Transition`. **A nonce can never
+ * apply to an attribute** — it is a property of an element — so no amount of
+ * nonce-plumbing covers this.
  *
- * The CSP spec closes the obvious workaround: **when a directive contains a nonce
- * or a hash, `'unsafe-inline'` is ignored.** So `style-src` cannot be "nonce for
- * our styles, `'unsafe-inline'` for theirs" — it's one or the other.
+ * The CSP spec then closes the obvious workaround: **when a directive contains a
+ * nonce or a hash, `'unsafe-inline'` is ignored.** So `style-src` cannot be "nonce
+ * for our `<style>` elements, `'unsafe-inline'` for the attributes" — within one
+ * directive it's one or the other.
  *
  * That leaves three options, and this file takes the third:
  *
- * - nonce only → react-aria's stylesheet is refused. Verified: the rule is
- *   dropped, and the only symptom is touch behaviour degrading on touch devices.
- *   Silent, and it fails in exactly the environment least likely to be tested.
- * - nonce + `'sha256-...'` of react-aria's CSS → strictest thing that works, but
- *   the hash is pinned to a third party's internal stylesheet and goes stale on a
- *   patch bump. The tempting "fix" for a stale hash is to delete it, which
- *   reintroduces the silent breakage above.
- * - `'unsafe-inline'` for styles only → what's here. Injected CSS can deface a
+ * - **nonce only** → every inline `style` attribute is refused. Popovers stack at
+ *   the top-left corner, sliders lose their fill. Loud, but comprehensively
+ *   broken.
+ * - **`style-src 'nonce-…'` plus `style-src-attr 'unsafe-inline'`** → the strictest
+ *   arrangement that renders correctly, since `style-src-attr` is a separate
+ *   directive with its own list. It fails on the *other* kind of inline style:
+ *   `react-remove-scroll` (a Mantine dependency, used by `Modal` and `Drawer`)
+ *   creates a `<style>` element in the browser to lock body scroll. It reads its
+ *   nonce from `get-nonce`'s module-level `setNonce()`, which Mantine never calls,
+ *   so that element is refused — and the symptom is that the page scrolls behind
+ *   an open modal, which is easy to miss.
+ * - **`'unsafe-inline'` for styles only** → what's here. Injected CSS can deface a
  *   page and exfiltrate some attribute values via selectors; it cannot execute
  *   script. Given `script-src` stays strict, this is the smaller risk, and it
  *   doesn't rot.
+ *
+ * `MantineProvider` is still handed a `getStyleNonce` (see
+ * `components/providers/AppProviders.tsx`) so the one `<style>` element this app
+ * *does* control carries the nonce. That has no effect under the policy above — it
+ * exists so tightening `style-src` stays a one-line change here.
  *
  * `e2e/security.e2e.ts` asserts the app produces **no** CSP violations under the
  * production policy, so if this ever needs revisiting the test says so.
@@ -91,9 +102,9 @@ export function buildContentSecurityPolicy({
 		// have to be allow-listed.
 		`script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${isDev ? " 'unsafe-eval'" : ''}`,
 		// Same value in both environments — see the long note above on why this
-		// isn't nonce-based. Also covers inline `style` attributes, which react-aria
-		// writes constantly (popover positioning, slider fills, progress widths) and
-		// which nonces never apply to.
+		// isn't nonce-based. The deciding factor is inline `style` attributes, which
+		// Mantine writes constantly (popover positioning, slider fills, progress
+		// widths) and which nonces never apply to.
 		"style-src 'self' 'unsafe-inline'",
 	]
 

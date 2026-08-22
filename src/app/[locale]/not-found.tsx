@@ -1,7 +1,7 @@
-import { buttonVariants, Heading, Paragraph } from '@heroui/react'
-import { SearchX } from 'lucide-react'
+import { Center, Stack, Text, ThemeIcon, Title } from '@mantine/core'
+import { FileMagnifyingGlassIcon } from '@phosphor-icons/react/ssr'
 import { getTranslations } from 'next-intl/server'
-import { Link } from '@/i18n/navigation'
+import { ButtonLink } from '@/components/ui/ButtonLink'
 
 /**
  * Rendered for unmatched URLs (via app/[locale]/[...rest]/page.tsx) and for
@@ -10,27 +10,26 @@ import { Link } from '@/i18n/navigation'
  * It sits outside the (app) group, so it gets no rail — and deliberately so:
  * bringing AppShell in here would require a session, and a 404 has to render for
  * signed-out visitors too.
+ *
+ * Icons come from `@phosphor-icons/react/ssr`, not the package root: the default
+ * build reads an `IconContext` and so is a Client Component, which this is not.
+ * The `/ssr` build renders the same SVG without the context.
  */
 export default async function NotFound() {
 	const t = await getTranslations('Errors')
 
 	return (
-		<div className="flex min-h-dvh items-center justify-center p-6">
-			<div className="flex max-w-100 flex-col items-center gap-4 text-center">
-				<div className="bg-default text-muted flex size-18 items-center justify-center rounded-full">
-					<SearchX className="size-9" />
-				</div>
-				<Heading level={1}>404</Heading>
-				<Paragraph className="text-muted">{t('notFound')}</Paragraph>
-				{/* buttonVariants() rather than <Button>: see (app)/403/page.tsx */}
-				<Link
-					href="/"
-					replace
-					className={buttonVariants({ variant: 'secondary' })}
-				>
+		<Center mih="100dvh" p="lg">
+			<Stack align="center" gap="md" maw={400} ta="center">
+				<ThemeIcon color="gray" variant="light" size={72} radius="xl">
+					<FileMagnifyingGlassIcon size={36} />
+				</ThemeIcon>
+				<Title order={1}>404</Title>
+				<Text c="dimmed">{t('notFound')}</Text>
+				<ButtonLink href="/" replace variant="default">
 					{t('backHome')}
-				</Link>
-			</div>
-		</div>
+				</ButtonLink>
+			</Stack>
+		</Center>
 	)
 }

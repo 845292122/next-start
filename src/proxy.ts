@@ -6,7 +6,7 @@ import { routing } from '@/i18n/routing'
 
 /**
  * The header Next reads the nonce from, and the one `app/[locale]/layout.tsx`
- * forwards to next-themes. The name is Next's convention.
+ * forwards to Mantine's `<ColorSchemeScript>`. The name is Next's convention.
  */
 const NONCE_HEADER = 'x-nonce'
 const CSP_HEADER = 'Content-Security-Policy'
@@ -59,7 +59,8 @@ export function proxy(request: NextRequest) {
 	//   inline styles automatically. Set it only on the response and none of that
 	//   happens.
 	// - `x-nonce` is for our own code: `app/[locale]/layout.tsx` reads it and hands
-	//   it to next-themes, whose blocking script Next knows nothing about.
+	//   it to Mantine's `<ColorSchemeScript>` and to `MantineProvider`, neither of
+	//   which Next knows anything about.
 	request.headers.set(CSP_HEADER, csp)
 	request.headers.set(NONCE_HEADER, nonce)
 

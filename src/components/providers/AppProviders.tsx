@@ -1,16 +1,21 @@
 'use client'
 
-import { I18nProvider, RouterProvider, Toast } from '@heroui/react'
+import { MantineProvider } from '@mantine/core'
+import { Notifications } from '@mantine/notifications'
 import type { Session } from 'next-auth'
 import { SessionProvider } from 'next-auth/react'
-import { useLocale } from 'next-intl'
-import { ThemeProvider } from 'next-themes'
-import { useRouter } from '@/i18n/navigation'
+import { cssVariablesResolver } from '@/components/providers/css-variables-resolver'
+import { theme } from '@/components/providers/theme'
 
 /**
- * Every client-side provider the app needs, in one place. HeroUI v3 has no
- * single HeroUIProvider of its own — it's built on react-aria-components, whose
- * concerns (routing, locale, toast queue) are separate providers.
+ * Every client-side provider the app needs, in one place.
+ *
+ * Shorter than it looks like it should be, because Mantine concentrates what
+ * other kits spread out: `MantineProvider` carries the theme, the colour scheme
+ * and the CSS variables, and there is no router or locale provider to wire —
+ * Mantine components take `component={Link}` per call site rather than resolving
+ * navigation through context, and its only locale-sensitive concern (text
+ * direction) is LTR for both of this app's locales.
  */
 export function AppProviders({
 	children,
@@ -22,55 +27,45 @@ export function AppProviders({
 	/**
 	 * The CSP nonce, read from the request by `app/[locale]/layout.tsx`.
 	 *
-	 * Only next-themes needs it: it renders its own inline `<script>`, and a
-	 * nonce-based CSP blocks that unless it's tagged. Everything Next generates
-	 * gets a nonce automatically.
+	 * Used for the `<style>` element `MantineProvider` generates to hold the
+	 * theme's CSS variables. Everything Next itself emits gets a nonce
+	 * automatically; this element is created by Mantine, so it has to be told.
 	 */
 	nonce?: string
 }) {
-	const locale = useLocale()
-	const router = useRouter()
-
 	return (
 		<SessionProvider session={session}>
 			{/*
-			 * attribute="class" writes class="light" / class="dark" on <html>, which
-			 * is exactly what HeroUI's theme variables key off (see
-			 * @heroui/styles/dist/themes/default/variables.css).
-			 *
-			 * next-themes rather than HeroUI's own useTheme(): that hook applies the
-			 * theme in a layout effect after hydration, so a user who prefers dark
-			 * gets one frame of light first. next-themes injects a blocking script
-			 * into <head> and gets it right before the first paint.
+			 * defaultColorScheme="auto" — follow the OS until the user picks
+			 * otherwise. It has to match the value given to `<ColorSchemeScript>` in
+			 * app/[locale]/layout.tsx: the script decides what the page paints with
+			 * *before* React runs, so a mismatch is a flash of the wrong scheme
+			 * followed by a correction.
 			 */}
-			<ThemeProvider
-				attribute="class"
-				defaultTheme="system"
-				enableSystem
-				disableTransitionOnChange
-				nonce={nonce}
+			<MantineProvider
+				theme={theme}
+				defaultColorScheme="auto"
+				cssVariablesResolver={cssVariablesResolver}
+				/*
+				 * Note this has no effect under the *current* policy: `style-src` keeps
+				 * `'unsafe-inline'` (see core/security-headers.ts on why Mantine's
+				 * inline `style` attributes leave no alternative), and per the CSP spec
+				 * a directive holding a nonce ignores `'unsafe-inline'`, not the other
+				 * way round. It's here so that tightening `style-src` to nonce-only
+				 * stays a one-line change in that file, with our own styles already
+				 * compliant.
+				 */
+				getStyleNonce={nonce ? () => nonce : undefined}
 			>
-				{/* Drives react-aria's date, number and collation formatting. */}
-				<I18nProvider locale={locale}>
-					{/*
-					 * Without this, `href` on a HeroUI Button/Link is a plain <a> and
-					 * every click is a full page load. next-intl's router is used rather
-					 * than Next's so the locale prefix is applied.
-					 */}
-					{/*
-					 * No SWRConfig: it existed only to install a global URL fetcher, and
-					 * nothing fetches by URL any more — SWR consumers pass a Server Action
-					 * as their fetcher (see features/notes/components/NoteList.tsx). A
-					 * global URL fetcher left in place would quietly sanction
-					 * `useSWR('/api/...')`, which is the path this template steered away
-					 * from. Add SWRConfig back if you need genuinely global SWR options.
-					 */}
-					<RouterProvider navigate={(href) => router.push(href)}>
-						<Toast.Provider placement="bottom end" />
-						{children}
-					</RouterProvider>
-				</I18nProvider>
-			</ThemeProvider>
+				{/*
+				 * Not a provider despite living here — it's the component that renders
+				 * the notification stack, and `notifications.show()` reaches it through
+				 * a module-level store. Exactly one may be mounted; a second one
+				 * renders every notification twice.
+				 */}
+				<Notifications position="bottom-right" />
+				{children}
+			</MantineProvider>
 		</SessionProvider>
 	)
 }

@@ -102,23 +102,27 @@ test.describe('the app runs under the production CSP', () => {
 		})
 	}
 
-	test('the next-themes blocking script is not blocked', async ({ page }) => {
-		// The sharpest check of the nonce wiring. next-themes renders its own inline
-		// <script> to set the theme class before first paint; Next tags its own
-		// scripts with the nonce but knows nothing about that one, so
+	test("Mantine's colour-scheme script is not blocked", async ({ page }) => {
+		// The sharpest check of the nonce wiring. `<ColorSchemeScript>` is an inline
+		// <script> that sets the scheme attribute before first paint; Next tags its
+		// own scripts with the nonce but knows nothing about that one, so
 		// app/[locale]/layout.tsx forwards `x-nonce` to it by hand. If that breaks,
-		// the script is refused and <html> never gets a theme class — which is
-		// exactly the flash-of-light-theme this library was chosen to prevent.
+		// the script is refused and <html> keeps the static 'light' that
+		// `mantineHtmlProps` wrote — i.e. the flash of the wrong scheme this script
+		// exists to prevent.
 		await page.goto('/dashboard')
 
-		await expect(page.locator('html')).toHaveClass(/light|dark/)
+		await expect(page.locator('html')).toHaveAttribute(
+			'data-mantine-color-scheme',
+			/light|dark/,
+		)
 	})
 
-	test('a HeroUI overlay still positions itself', async ({ page }) => {
-		// react-aria positions popovers with inline `style` attributes, which nonces
-		// never cover — one of the two reasons style-src settles for 'unsafe-inline'
-		// (see core/security-headers.ts). A popover collapsed at 0,0 or unstyled is
-		// the symptom if that regresses.
+	test('a Mantine overlay still positions itself', async ({ page }) => {
+		// Mantine positions popovers with inline `style` attributes, which nonces
+		// never cover — the reason style-src settles for 'unsafe-inline' (see
+		// core/security-headers.ts). A popover collapsed at 0,0 or unstyled is the
+		// symptom if that regresses.
 		await page.goto('/dashboard')
 
 		const trigger = page.getByRole('button', { name: '切换语言' })

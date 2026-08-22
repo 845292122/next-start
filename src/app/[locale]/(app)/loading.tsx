@@ -1,4 +1,4 @@
-import { Spinner } from '@heroui/react'
+import { Center, Loader } from '@mantine/core'
 
 /**
  * Suspense fallback for the (app) group.
@@ -9,13 +9,15 @@ import { Spinner } from '@heroui/react'
  * and only the content area swaps — which is also why it doesn't need to fill the
  * viewport.
  *
- * A Server Component: there's no interactivity, so there's no reason to ship it
- * to the browser.
+ * A Server Component: there's no interactivity, so there's no reason to ship it to
+ * the browser. (`Loader` itself is a Client Component — every Mantine export is —
+ * but a static one with no props from here, so it costs one boundary and no
+ * state.)
  */
 export default function AppGroupLoading() {
 	return (
-		<div className="flex min-h-[60vh] items-center justify-center p-6">
-			<Spinner />
-		</div>
+		<Center mih="60vh" p="md">
+			<Loader />
+		</Center>
 	)
 }

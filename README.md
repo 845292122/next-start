@@ -1,6 +1,6 @@
 # next-start
 
-一个全栈 Next.js 项目模板：App Router + HeroUI + Drizzle/SQLite + Auth.js + next-intl，包管理和运行时用 Bun。
+一个全栈 Next.js 项目模板：App Router + Mantine + Drizzle/SQLite + Auth.js + next-intl，包管理和运行时用 Bun。
 
 开箱即用的部分：中英双语路由、明暗主题、手机号+验证码登录（带路由守卫）、一条完整的
 「建表 → service → Server Action → 界面」示例（`/notes`，含分页、事务和 LIKE 转义），一套 Server Action 和 Route Handler
@@ -40,12 +40,12 @@ bun run dev
 | --- | --- |
 | 运行时 / 包管理 | Bun 1.3 |
 | 框架 | Next.js 16（App Router，Server Components 默认） |
-| UI | HeroUI 3 + Tailwind CSS 4（底层是 react-aria-components） |
-| 图标 | lucide-react |
+| UI | Mantine 9（CSS Modules + CSS 变量，没有 Tailwind） |
+| 图标 | `@phosphor-icons/react`（Mantine 官方文档用的那套） |
 | 数据库 / ORM | SQLite（`@libsql/client`）+ Drizzle 0.45 |
 | 认证 | Auth.js（next-auth 5 beta）+ `@auth/drizzle-adapter`；cookie 与 Bearer 两种传输共用一个验证核心 |
 | 国际化 | next-intl 4（中英双语） |
-| 表单 / 校验 | react-hook-form + Zod 4 |
+| 表单 / 校验 | `@mantine/form` + Zod 4（Standard Schema） |
 | 客户端数据 | SWR 2 |
 | 代码质量 | Biome 2 |
 | 测试 | `bun test` + happy-dom；Playwright |

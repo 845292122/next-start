@@ -1,6 +1,6 @@
 # 项目技术文档
 
-一个全栈 Next.js 模板：App Router + HeroUI + Drizzle/SQLite + Auth.js + next-intl，包管理和运行时都用 Bun。
+一个全栈 Next.js 模板：App Router + Mantine + Drizzle/SQLite + Auth.js + next-intl，包管理和运行时都用 Bun。
 
 > ⚠️ 动手之前先看 [AGENTS.md](AGENTS.md)：这个仓库用的 Next.js 版本有 breaking changes，API 和约定
 > 可能和你记忆里的不一样。写代码前查 `node_modules/next/dist/docs/` 里对应的文档。
@@ -38,17 +38,17 @@
 | --- | --- | --- |
 | 运行时 / 包管理 | Bun 1.3.3 | `bun install` / `bun run`，测试也用 Bun 自带的 runner |
 | 框架 | Next.js 16.3.1 | App Router，Server Components 默认 |
-| UI | HeroUI 3.2.4 | 底层是 react-aria-components，样式是 Tailwind v4 + CSS 变量 |
-| 样式 | Tailwind CSS 4.3 | 没有 `tailwind.config.js`，配置全在 CSS 里 |
-| 图标 | `lucide-react` | HeroUI 只自带十几个内部图标，不是图标库 |
+| UI | Mantine 9.5.1 | 组件自带尺寸/间距 props；主题是一个 TS 对象 |
+| 样式 | CSS Modules + `postcss-preset-mantine` | **没有 Tailwind**，也没有任何 utility class |
+| 图标 | `@phosphor-icons/react` | Mantine 官方文档和部分 `@mantine/*` 包用的就是这套 |
 | 数据库 | SQLite | 单文件，无需服务或容器；驱动是 `@libsql/client` |
 | ORM / 迁移 | Drizzle 0.45 + drizzle-kit 0.31 | schema 就是 TS，迁移 SQL 进版本库 |
 | 认证 | Auth.js（next-auth 5 beta） | Credentials provider + JWT session + `@auth/drizzle-adapter` |
 | 国际化 | next-intl 4.13 | 中英双语，`[locale]` 路由段 + `src/proxy.ts` |
-| 表单 | react-hook-form + `@hookform/resolvers` | 配 Zod schema |
+| 表单 | `@mantine/form` | 用 `schemaResolver()` 直接吃 Zod schema（Standard Schema） |
 | 校验 | Zod 4 | 表单、Route Handler、Server Action 共用同一份 schema |
 | 客户端数据 | SWR 2.5 | 需要客户端搜索/轮询/乐观更新时用 |
-| 明暗主题 | next-themes | 注入阻塞脚本，首屏不闪 |
+| 明暗主题 | Mantine 自带 | `<ColorSchemeScript>` 是阻塞脚本，首屏不闪 |
 | 邮件 | Resend + `@react-email/components` | 模板是 tsx |
 | 日志 | pino（开发环境 pino-pretty） | |
 | 环境变量 | `@t3-oss/env-nextjs` | 启动时用 Zod 校验，缺变量直接报错 |
@@ -91,7 +91,7 @@ src/app/
 ├── manifest.ts         # /manifest.webmanifest —— 同上，且无法本地化
 ├── global-error.tsx    # 根布局自己炸掉时的最后兜底，零 import
 ├── favicon.ico
-└── globals.css         # 唯一的样式入口
+└── globals.css         # 文档级全局 CSS，不是唯一样式入口，见[UI 与主题](#ui-与主题)
 ```
 
 约定与注意：
@@ -103,8 +103,10 @@ src/app/
   `src/proxy.ts` 的 matcher 也把 `/api` 排除掉了。
 - **根布局是 [src/app/\[locale\]/layout.tsx](src/app/%5Blocale%5D/layout.tsx)，仓库里没有
   `src/app/layout.tsx`。** 它干四件事：校验 `params.locale`（非法值走 `notFound()`）、
-  `setRequestLocale()`、`await auth()` 拿 session 传给 Provider、给 `<html>` 加
-  `suppressHydrationWarning`（next-themes 要求，见 [UI 与主题](#ui-与主题)）。
+  `setRequestLocale()`、`await auth()` 拿 session 传给 Provider、给 `<html>` 摊上
+  `mantineHtmlProps`（里面就是 `data-mantine-color-scheme="light"` 和
+  `suppressHydrationWarning`，见 [UI 与主题](#ui-与主题)）并在 `<head>` 里渲染
+  `<ColorSchemeScript>`。
   它是动态渲染的（读了 session），别指望这一层有静态优化。
 - **`[...rest]/page.tsx` 不能删。** 没有它，未匹配的路径会去找（不存在的）根 `not-found`，
   渲染出 Next 内置的 404 而不是我们自己的页面。
@@ -125,18 +127,23 @@ src/app/
 ```
 src/components/
 ├── layout/     # 应用外壳：AppShell.tsx + NavLinks.ts
-├── providers/  # 全局 Provider（AppProviders.tsx）
-└── ui/         # 通用小部件：BlackHoleMark / ErrorState / LoginHero / color-mode / locale-switch / sign-out-button
+├── providers/  # 全局 Provider（AppProviders.tsx）+ Mantine 主题（theme.ts / css-variables-resolver.ts / mantine-overrides.css）
+└── ui/         # 通用小部件：BlackHoleMark / ButtonLink / ErrorState / LoginHero / color-mode / locale-switch / sign-out-button
 ```
 
-规则：**这里不写业务逻辑，也不碰数据库。** 只依赖 props、HeroUI 和 session。要用到某个业务域的
+规则：**这里不写业务逻辑，也不碰数据库。** 只依赖 props、Mantine 和 session。要用到某个业务域的
 东西，说明它该放 `features/`。
 
 - [src/components/layout/NavLinks.ts](src/components/layout/NavLinks.ts)：rail 的导航项清单，
   加页面要来这里加一条。注意 `labelKey` 是消息 key 而不是文案——这个模块不是组件，调不了 hook。
 - [src/components/ui/color-mode.tsx](src/components/ui/color-mode.tsx)：`useColorMode()` 的
   公开 API（`colorMode` / `mode` / `setMode` / `toggleColorMode`）和姊妹模板保持一致，
-  内部换成了 next-themes，所以调用方的代码可以互搬。
+  内部换成了 Mantine 的 `useMantineColorScheme` + `useComputedColorScheme`，所以调用方的代码
+  可以互搬。
+- [src/components/ui/ButtonLink.tsx](src/components/ui/ButtonLink.tsx)：一个 `'use client'` 的
+  薄壳，就为了 `<Button component={Link}>`。**Server Component 里写不了这一句**——RSC 环境下
+  next-intl 的 `Link` 是服务端组件，把它当 prop 传给（必然是客户端组件的）Mantine 组件会报
+  "Functions cannot be passed directly to Client Components"。403 / 404 两个页面因此走这个壳。
 
 ### `src/features/<域>/` — 单个业务域的前端组织
 
@@ -227,7 +234,7 @@ src/core/
 | `test/unit-setup.ts` | 把 `DATABASE_URL` 顶成 `:memory:`。**只由 `test:unit` 脚本 `--preload`**，见[测试](#测试) |
 | `biome.json` | 格式化 + lint + import 排序规则 |
 | `playwright.config.ts` | E2E 配置：setup project + `webServer` 跑 db:reset → build → start |
-| `postcss.config.mjs` | 只有 `@tailwindcss/postcss` 一个插件 |
+| `postcss.config.mjs` | `postcss-preset-mantine` + `postcss-simple-vars`（断点变量），见[UI 与主题](#ui-与主题) |
 | `next.config.ts` | next-intl 插件 + `serverExternalPackages`（libsql 的原生模块不能打包）+ 固定安全响应头 |
 | `Dockerfile` / `.dockerignore` | 单实例生产镜像，见[部署](#部署)。**未构建验证过** |
 | `bunfig.toml` | 只有 `[test]` 的覆盖率配置。**别在这里加全局 `preload`**，见[测试](#测试) |
@@ -565,8 +572,8 @@ if (!result.ok) {
   [ErrorState](src/components/ui/ErrorState.tsx)，两个文件的差别只是它渲染在哪。
 - **`global-error.tsx` 什么都 import 不了，这是刻意的。** 它替换掉根布局，所以：得自己渲染
   `<html>`/`<body>`；不能 `export metadata`（错误边界是 Client Component，用 React 的
-  `<title>` 代替）；**拿不到全局样式**，因为 next-themes 的脚本和它写的 `class="light|dark"`
-  都属于刚刚炸掉的那个 layout。更重要的是，这是应用坏掉时唯一还要工作的页面——每一个
+  `<title>` 代替）；**拿不到全局样式**，因为 `<ColorSchemeScript>` 和它写的
+  `data-mantine-color-scheme` 都属于刚刚炸掉的那个 layout。更重要的是，这是应用坏掉时唯一还要工作的页面——每一个
   import 都是它跟着一起坏掉的途径，所以它用内联 `<style>` 和硬编码文案，一个 import 都没有。
   文案是中英双语硬编码的：翻译在 `NextIntlClientProvider` 后面，而那个 provider 已经没了。
 - **`digest` 值得露出来。** 生产环境下真实消息只在服务端日志里，客户端只有这个 hash——它是
@@ -696,23 +703,30 @@ per-request 包装器的位置，而实际会打日志的地方只有 `runAction
 `script-src` 是 nonce + `'strict-dynamic'`——真正阻止注入脚本执行的就是这一条。
 `style-src` 只做到 `'unsafe-inline'`。原因值得完整记下来，因为它反直觉：
 
-**react-aria（HeroUI 的底座）会在运行时注入自己的 `<style>` 元素**
-（`[data-react-aria-pressable] { touch-action: ... }`），它没有 nonce，react-aria 也没有提供
-传 nonce 的入口。
+**Mantine 大量用 `style` 属性而不是 class 来定位**：floating-ui 给每个 Popover / Tooltip /
+Menu 写内联 `style`，`Progress` 的宽度、`Slider` 的填充、每个 `Transition` 也一样。
+**nonce 永远管不到属性**——nonce 是元素的属性，不是声明的属性——所以再怎么接线都盖不住这一片。
 
 而 CSP 规范堵死了那个显而易见的绕法：**一个 directive 里只要出现 nonce 或 hash，
-`'unsafe-inline'` 就会被忽略。** 所以 `style-src` 做不到"我们的样式用 nonce、它的用
-unsafe-inline"——只能二选一。
+`'unsafe-inline'` 就会被忽略。** 所以 `style-src` 做不到"我们的 `<style>` 用 nonce、内联属性用
+unsafe-inline"——在同一个 directive 里只能二选一。
 
 于是只有三条路，本项目选了第三条：
 
-1. **只用 nonce** → react-aria 那张样式表被拒。实测过：规则被丢掉，唯一症状是触摸设备上的
-   触摸行为退化。安静，而且恰好坏在最不容易被测到的环境里。
-2. **nonce + react-aria CSS 的 `'sha256-...'`** → 能跑的最严方案，但哈希钉在第三方的内部
-   样式表上，一次 patch 升级就失效。而哈希失效时最顺手的"修法"是把它删掉——那就退回第 1 条
-   的静默故障。
+1. **只用 nonce** → 所有内联 `style` 属性被拒。浮层全部堆在左上角，slider 没有填充。
+   响很大，但也彻底不能用。
+2. **`style-src 'nonce-…'` + 单独的 `style-src-attr 'unsafe-inline'`** → 能正常渲染的最严方案
+   （`style-src-attr` 是独立 directive，有自己的白名单）。它栽在另一类内联样式上：
+   `react-remove-scroll`（Mantine 的依赖，`Modal` / `Drawer` 用它锁滚动）在浏览器里创建
+   `<style>` 元素，它的 nonce 只能来自 `get-nonce` 的模块级 `setNonce()`，而 Mantine 从不调用
+   ——于是那个元素被拒，症状是弹窗打开时背景还能滚，很容易漏掉。
 3. **样式放开 `'unsafe-inline'`** → 现在的做法。注入的 CSS 能污染页面、能通过选择器外泄一些
    属性值，但**不能执行脚本**。在 `script-src` 保持严格的前提下，这是更小的风险，而且不会腐烂。
+
+顺带一提，`MantineProvider` 还是接了 `getStyleNonce`（见
+[AppProviders.tsx](src/components/providers/AppProviders.tsx)），让**我们自己控制的**那一个
+`<style>`（主题的 CSS 变量）带上 nonce。在上面的策略下它不产生任何效果，存在的意义是：哪天要收紧
+`style-src`，改动只在 `security-headers.ts` 一行。
 
 `e2e/security.e2e.ts` 断言生产策略下**零** CSP 违规，所以哪天需要重新审视，测试会先说话。
 
@@ -721,10 +735,10 @@ unsafe-inline"——只能二选一。
 Next 会自动把 nonce 打到它**自己**生成的东西上（框架脚本、页面 chunk、它自己的内联样式）。
 它不认识的就得自己接：
 
-- **next-themes 的阻塞脚本。** `app/[locale]/layout.tsx` 读 `x-nonce` 传给
-  `AppProviders` → `ThemeProvider` 的 `nonce` prop。接错了的症状恰恰是 next-themes 被选进来
-  要解决的那个问题：hydration 之前闪一帧浅色。`e2e/security.e2e.ts` 有一条用例断言
-  `<html>` 上有 `light|dark` class，就是守这个。
+- **Mantine 的 `<ColorSchemeScript>`。** `app/[locale]/layout.tsx` 读 `x-nonce` 直接传给它的
+  `nonce` prop（同一个值也给 `MantineProvider` 的 `getStyleNonce`）。接错了的症状恰恰是这个脚本
+  被放进来要解决的那个问题：首屏闪一帧错误的配色。`e2e/security.e2e.ts` 有一条用例断言
+  `<html>` 上的 `data-mantine-color-scheme` 是 `light|dark`，就是守这个。
 - **CSP header 必须同时设在请求和响应上。** 响应那份是浏览器执行的；**请求那份是 Next 用来
   解析出 nonce 并打到自己脚本上的**——只设响应，Next 自己的脚本就全部没有 nonce。
 
@@ -786,173 +800,115 @@ Server Action 不在此列——它自带 origin 校验。
 
 ## UI 与主题
 
-### 样式入口只有一个
+### 主题是三个文件，各管一层
 
-[src/app/globals.css](src/app/globals.css)：
+[src/components/providers/](src/components/providers/) 下：
 
-```css
-@import '@heroui/react/styles';   /* 内含 @import "tailwindcss" */
-:root, .light { --accent: ...; }  /* 单色主题覆盖，故意不包 @layer */
-@source '../';                    /* 让 Tailwind 扫 src/ */
-@theme { --font-sans: ...; --animate-page-enter: ...; }
-@keyframes pageEnter / blackholeSpin
-@layer components { ... }         /* 见下面「什么该写进 globals.css」 */
-```
+| 文件 | 是什么 | 改什么去这里 |
+| --- | --- | --- |
+| [theme.ts](src/components/providers/theme.ts) | `createTheme()` 的返回值，纯 TS 对象 | 调色板、间距/字号/圆角刻度、每个组件的 `.extend()`（`vars` / `styles` / `defaultProps`） |
+| [css-variables-resolver.ts](src/components/providers/css-variables-resolver.ts) | `CSSVariablesResolver` 函数 | `createTheme()` 管不到的 CSS 变量——按明暗分开的语义变量（`--mantine-color-dimmed`、`--mantine-color-text` 之类），以及本项目自己的 token（`--app-font-serif`） |
+| [mantine-overrides.css](src/components/providers/mantine-overrides.css) | 纯 CSS，选择器打在 Mantine 自己的类名上（`.mantine-Button-root` 等） | `.extend()` 的 `vars` / `styles` 到不了的地方——`:hover` / `:checked` / `::after` 这类伪类和状态组合 |
 
-前两条都是必需的，各有原因：
+三者在 [AppProviders.tsx](src/components/providers/AppProviders.tsx) 里接成
+`<MantineProvider theme={theme} cssVariablesResolver={cssVariablesResolver}>`；
+`mantine-overrides.css` 是普通 CSS 文件，和 Mantine 自己的两份 `styles.css` 一起在
+[layout.tsx](src/app/[locale]/layout.tsx) 里按顺序 import——**顺序是硬约束**（晚导入的覆盖
+早导入的），细节看那个文件顶部的注释。
 
-- **不要再单独 `@import "tailwindcss"`。** HeroUI 的入口
-  （`node_modules/@heroui/styles/dist/index.css`）已经引过了，再引一次每个 utility 都会出现两遍。
-- **`@source '../'` 不能省。** Tailwind 的自动内容探测以"引入 tailwindcss 的那个文件所在目录"
-  为根，而按上一条那是在 `node_modules` 里，而 `node_modules` 永远不会被扫。少了这行，
-  `src/` 里用到的 utility 一个都不会生成——页面会渲染成完全没样式。
-
-**没有 `tailwind.config.js`。** 主题令牌（字体栈、动画）写在 CSS 的 `@theme` 块里。
+**没有 utility class 层，也没有 Tailwind。** 组件排版用 Mantine 的 style props
+（`<Stack gap="md">`、`<Text c="dimmed">`），组件私有样式用 CSS Modules
+（`AppShell.module.css`、`BlackHoleMark.module.css`）。
 
 ### 什么该写进 globals.css
 
-优先级永远是 **Tailwind utility → HeroUI 语义变量 → `globals.css`**。只有下面这几类东西
-才值得进 `globals.css`，其余一律用 utility 表达在组件里：
+几乎没有——[globals.css](src/app/globals.css) 现在只有一条规则
+（`html, body { height: 100% }`），而且它必须留在文档级：`100%` 高度的子孙元素要一路追到
+`<html>` / `<body>` 才能解析成具体像素，这条链路没法下放到某个组件的 CSS Module 里。
 
-| 类别 | 现有例子 | 为什么不能用 utility |
-| --- | --- | --- |
-| 主题变量覆盖 | 单色主题那两个 `:root` / `.dark` 块 | 就是变量声明本身 |
-| `@theme` 令牌 | `--font-sans` / `--animate-page-enter` | Tailwind 靠它生成 utility |
-| `@keyframes` | `pageEnter`、`blackholeSpin` | 关键帧没有 utility 形式 |
-| 补 HeroUI 缺的样式 | `.button--shadow`、`.menu-item` 抬升 | 要挂到 HeroUI 自己的类名上 |
-| 多元素图形 | `.blackhole*` | conic-gradient + 遮罩写成 arbitrary value 没法读 |
+判断一条规则该不该进 `globals.css` 的标准很简单：**它是不是在描述某个具体组件？** 是的话
+就该进那个组件自己的 CSS Module，或者如果是所有实例共享的行为/配色，进 `theme.ts` 的
+`.extend()` 或 `mantine-overrides.css`（见上一节）。`globals.css` 只留给真正"跟哪个组件都
+无关，纯粹是文档本身的"规则。
 
-**主题覆盖那两块故意不包 `@layer`。** HeroUI 自己的变量在 `@layer base` 里，而按 Cascade
-Layers 规范，不在任何 layer 里的规则**无条件**压过所有 layer 里的规则，跟选择器特异性无关。
-所以裸放就能覆盖，不用去比特异性。反过来，补 HeroUI 组件样式的那几块**要**放
-`@layer components`，这样组件里一个 `shadow-none` utility 还能盖掉它（utilities 层高于
-components 层）。
+### `mantine-overrides.css` 的一个坑：`alpha()` 不是 CSS 函数
 
-### 补出来的两个 HeroUI 样式
+`@mantine/core` 导出一个叫 `alpha()` 的 JS helper（`alpha('var(--x)', 0.5)` 在 JS 里算出
+一个颜色字符串），但**CSS 里没有这个函数**。照着那份写法直接搬进 `.css` 文件
+（`background-color: alpha(var(--x), 0.5)`）时，浏览器会把这条声明当成非法值**静默丢弃**——
+不报错、控制台也不警告，症状只是"这条规则看起来没生效"。CSS 里要做同样的事得用原生的
+`color-mix(in srgb, var(--x) 50%, transparent)`。
 
-HeroUI 3 有两处缺口，都在 `globals.css` 的 `@layer components` 里补上了：
+### 字体：CJK 回退写在 `theme.ts` 里
 
-- **`.button--shadow`** —— v2 有 `variant="shadow"`，v3 砍掉了。补成一个**可叠加的修饰类**
-  而不是新 variant：HeroUI 每个颜色 variant 只是设 `--button-bg` 这几个变量，所以阴影颜色直接
-  从同一个变量 `color-mix()` 出来，能和任意 variant 组合，不用给每种颜色写一份。用法是手写
-  `className="button--shadow"`。在 `outline` / `ghost` 上几乎看不见——它们的 `--button-bg`
-  是透明的，这是预期结果。
-- **`.menu-item` 悬停抬升** —— HeroUI 的 `.menu-item` 已经声明了 `transition: box-shadow`
-  却从没设过任何阴影，钩子留着效果没实现。补的时候有三个坑，注释里都写了，改之前先读：
-  阴影要有 padding 容身之处（外层 popover 是滚动容器，按列表盒子裁剪）；白底浮层上的白卡片
-  必须给列表加底色才有图底关系；以及**那条 padding 覆盖必须打得过
-  `.dropdown__popover [data-slot="dropdown-menu"]` 的 (0,2,0) 特异性**——输了的话同一条规则
-  里其它声明照样生效，只有 padding 被吃掉，看起来完全不像特异性问题。
+`theme.ts` 里的 `FONT_FAMILY_SANS` / `FONT_FAMILY_MONOSPACE`（`css-variables-resolver.ts`
+里对应的是 `FONT_FAMILY_SERIF`）都在基础字体后面手动接了一串中文回退（`PingFang SC` /
+`Microsoft YaHei` / `Songti SC` / `Noto Serif SC`）。**必须手动接**：UI 是中文，而这些基础
+字体（不管是 `Geist` 还是 `Georgia`）都没有 CJK 字形，缺了回退就是整段中文文字静默掉回浏览器
+默认字体——换字体前肉眼根本不会注意到。`--app-font-serif` 是本项目自己加的 token（登录页大
+标题、`LoginForm` 用），不属于 vendor 主题本身，改 `css-variables-resolver.ts` 时容易漏掉。
 
-### 侧边栏 rail 的两个取舍
+### 对比度：用 axe 量，不用眼睛量
+
+现在这套主题（含 21 个 Tailwind 风格的调色板）是整份搬进来的，Mantine 默认调色板和
+`primaryShade` 都不是它的出发点，所以旧主题量出来的对比度数字全部作废。真正在用的方法是跑
+[e2e/a11y.e2e.ts](e2e/a11y.e2e.ts)（axe），看它指认哪个具体元素不达标，再改那一个颜色的
+映射——不要提前手算 21 个颜色 × 好几个 variant 的对比度，没被哪个页面渲染到的组合就没法验证，
+也就不该预先改。具体测出来的三处修法见[工程化关卡](#工程化关卡)。
+
+### 明暗主题
+
+`data-mantine-color-scheme="light"|"dark"`（属性，不是 class），由 Mantine 的
+`<ColorSchemeScript defaultColorScheme="auto">` 在首屏 paint 前写好——这一行在
+[layout.tsx](src/app/[locale]/layout.tsx) 的 `<head>` 里，`nonce` 要手动接，见
+[两个必须手工接线的 nonce 消费者](#两个必须手工接线的-nonce-消费者)。
+
+- `<html {...mantineHtmlProps}>` 静态写了 `data-mantine-color-scheme="light"` 和
+  `suppressHydrationWarning`——前者保证没 JS 时也是有样式的浅色页面，后者是因为
+  `<ColorSchemeScript>` 会在 hydrate 前改掉这个属性，服务端标记和 DOM 本来就不一致。
+- `defaultColorScheme="auto"` 要同时给 `<ColorSchemeScript>` 和 `<MantineProvider>`——两处
+  必须一致，不一致就是先出一帧错的配色再纠正。
+- 三态（跟随系统 / 浅色 / 深色）走 [useColorMode()](src/components/ui/color-mode.tsx)：对外
+  API 和姊妹模板保持一致（`colorMode` / `mode` / `setMode` / `toggleColorMode`），内部是
+  Mantine 的 `useMantineColorScheme` + `useComputedColorScheme('light')` 的一层薄封装，不是
+  翻译层。`/settings` 页是用法示例。
+
+### 表单：`@mantine/form` 直接吃 Zod schema
+
+[LoginForm.tsx](src/features/auth/components/LoginForm.tsx) 是范例：
+
+```tsx
+const resolvePhoneOtp = schemaResolver(phoneOtpSchema, { sync: true })
+const form = useForm({ validate: resolvePhoneOtp, ... })
+```
+
+`schemaResolver()` 直接吃 Zod schema（Standard Schema）。`{ sync: true }` 让
+`form.validate()` 同步返回结果而不是 Promise——这点在"发送验证码"那一步很关键：按钮要在同一
+个事件循环里决定是否开始倒计时。字段报错信息不能来自 schema 本身（`core/auth/schema.ts`
+故意不带任何本地化文案，zod 产出的是不可翻译的英文串），所以按字段名查一个消息 key 的映射，
+而不是拼 `t(\`${field}Invalid\`)`——后者绕开了 next-intl 生成的 key 类型检查。
+
+### 侧边栏 rail 的一个坑,语言菜单的另一个
 
 [AppShell.tsx](src/components/layout/AppShell.tsx)：
 
 - **导航项只有图标，文字进 `aria-label`。** 可访问名和从前有可见文字时一样，所以
-  `getByRole('link', { name: '设置' })` 那些 e2e 断言不受影响——改这里时别把 `aria-label` 弄丢。
-- **`Tooltip.Trigger` 包着 `Link`，而不是让 `Link` 当 trigger。** react-aria 只把 trigger
-  的事件交给它自己的可聚焦组件，而这里必须是 `next/link` 才有预取和 `useLinkStatus`。
-  代价是**悬停会出 tooltip，键盘聚焦不会**（实测确认）。屏幕阅读器读的是 `aria-label`，
-  所以无障碍名字没丢，缺的是"只用键盘的视力正常用户看不到文字标签"。要补齐就得把 tooltip
-  改成受控（`isOpen` + 自己管 hover/focus 和延迟），代价不小，目前选择不补。
+  `getByRole('link', { name: '设置' })` 那些 e2e 断言不受影响——改这里时别把 `aria-label`
+  弄丢。
+- `Tooltip` 直接包 `ActionIcon`，本身不是坑——**这是一个曾经的坑被修好之后的样子**，值得记住
+  为什么：Mantine 的 `Tooltip` 把 ref 和事件处理器 clone 到子元素上，而不是外面套一个可聚焦
+  容器，所以每个导航项只有一个 tab 停靠点，键盘聚焦也会触发 tooltip。旧版本（另一套 UI 库）的
+  `Tooltip` 会多套一层 `role="button"`，`e2e/a11y.e2e.ts` 顶部的注释记着这件事——现在没有任何
+  规则被禁用，保持这样。
 
-### HeroUI 3 和 Mantine 的心智模型差异
-
-如果你从 Mantine 那套过来，几件事要重新习惯：
-
-- **没有 `HeroUIProvider`。** HeroUI 3 建在 react-aria-components 上，各关注点是独立
-  provider（routing / locale / toast queue），全在
-  [AppProviders.tsx](src/components/providers/AppProviders.tsx) 里。
-- **主题就是 CSS 变量，没有 JS 主题对象。** 语义角色（`accent` / `default` / `success` /
-  `warning` / `danger`，各自带 `-foreground` 和 `-soft`）和表面层级（`surface` /
-  `surface-secondary` / `surface-tertiary`）都是变量，`/dashboard` 那页把它们全摆出来了。
-  改主题 = 改变量，不改组件。
-- **组件普遍是复合组件，且没有尺寸 props。** 没有 `p="md"` 这种，排版一律 Tailwind 类。
-  `<Switch>` 要写 `<Switch.Control><Switch.Thumb/></Switch.Control><Switch.Content/>`。
-- **`Badge` 不是状态标签。** HeroUI 的 `Badge` 是带 `placement` 的角标；Mantine `Badge`
-  的对应物是 **`Chip`**。
-- **`Button` 是 `<button>`，不吃 `href`。** 要一个长得像按钮的链接，用 `buttonVariants()`
-  把类名给 `Link`：见 [(app)/403/page.tsx](src/app/%5Blocale%5D/%28app%29/403/page.tsx)。
-- **`Dropdown.Trigger` 包的是 react-aria 的裸 `Button`**，没有 `variant` / `isIconOnly`。
-  要带样式的触发器就直接把 HeroUI 的 `<Button>` 放进 `<Dropdown>` ——它建在同一个 primitive 上，
-  Dropdown 通过 context 照样找得到，见 [locale-switch.tsx](src/components/ui/locale-switch.tsx)。
-- **事件是 `onPress` 不是 `onClick`**（react-aria 的约定，覆盖鼠标/触摸/键盘）。
-- **`RouterProvider` 是接线点。** 没有它，HeroUI/react-aria 组件上的 `href` 就是普通 `<a>`，
-  点一下整页刷新。
-
-### 表单：`validationBehavior="aria"` 是必需的
-
-react-aria 的 `<Form>` 默认 `validationBehavior="native"`，于是**浏览器会先拦下提交**——
-一个格式不对的 `<input type="email">` 根本不会触发 submit，react-hook-form 的 resolver 不跑，
-zod 的报错也就永远不出现。用 react-hook-form 管校验时，在 `<Form>` 上写一次
-`validationBehavior="aria"`，下面的字段都会继承：
-
-```tsx
-<Form onSubmit={handleSubmit(onSubmit)} validationBehavior="aria">
-  <TextField isInvalid={!!errors.email}>
-    <Label>…</Label>
-    <InputGroup>
-      <InputGroup.Prefix><Mail /></InputGroup.Prefix>
-      <InputGroup.Input {...register('email')} />
-    </InputGroup>
-    <FieldError>{errors.email?.message}</FieldError>
-  </TextField>
-</Form>
-```
-
-字段里塞图标用 `InputGroup`（它自己管聚焦环），不要绝对定位一个 icon 上去。
-
-### 明暗主题
-
-`<html class="light|dark">`，由 **next-themes** 的阻塞脚本在首屏 paint 前写好。
-
-- 为什么不用 HeroUI 自带的 `useTheme()`：它在 layout effect 里才应用主题，
-  偏好深色的用户会先看到一帧浅色。next-themes 往 `<head>` 注入同步脚本，没有这个问题。
-- `class` 而不是 `data-theme`：HeroUI 的变量块选择器正好是 `.light` / `.dark`。
-- **`<html>` 上的 `suppressHydrationWarning` 不能删。** 那个脚本在 React hydrate 之前就
-  改了 class，服务端标记和 DOM 本来就不一致。
-- 三态（跟随系统 / 浅色 / 深色）走 `useColorMode()`，`/settings` 页是用法示例。
-
-#### next-themes 打了一个 patch
-
-`package.json` 的 `patchedDependencies` 里给 `next-themes@0.4.6` 打了
-[patches/next-themes@0.4.6.patch](patches/next-themes@0.4.6.patch)。**这是本仓库唯一的
-依赖 patch**，改动很小，但没有文档没人敢删，所以记在这里。
-
-上游 issue：[pacocoursey/next-themes#397](https://github.com/pacocoursey/next-themes/issues/397)
-（2026-08-18 提，**截至写下这行时仍是 open**）。那个 issue 描述的场景和本项目一模一样：
-next-intl 要求根 layout 落在 `[locale]` 动态段里，切换 locale 的客户端导航会让
-`ThemeProvider` 子树在客户端 remount，React 19.2 于是报错。
-
-patch 做的事（`dist/index.js` 和 `dist/index.mjs` 各改一处，改的是压缩产物）：给内部那个
-memo 化的 `ThemeScript` 组件加一个模块级标志 `themeScriptHasMounted`，在它的 `useEffect`
-里置为 `true`；此后的每次渲染返回 `null` 而不是 `<script>` 元素。
-
-- 服务端渲染时 `useEffect` 不执行，标志恒为 `false`，所以 SSR 输出里**照样有**那段阻塞脚本
-  ——首屏不闪的效果不受影响。
-- 客户端首次渲染（hydration）时标志还是 `false`，渲染出的 `<script>` 和 SSR 标记一致，
-  hydration 不会 mismatch。
-- 之后标志变成 `true`，任何**客户端重新渲染**都不再产出 script 元素。
-
-为什么需要它：`app/[locale]/layout.tsx` 是根 layout，`<head>` 在它手里。任何在客户端重新
-渲染到根 layout 的操作（比如 `LoginForm` 登录成功后的 `router.refresh()`）都会让 React
-重新渲染 `ThemeScript`。**React 不会执行自己在客户端创建的 `<script>`**，只会在控制台打一条
-`Encountered a script tag while rendering React component`。这条警告是 dev-only，且脚本此时
-不执行也无害（主题已经由 `ThemeProvider` 的 effect 接管了），但它会稳定地污染开发时的控制台，
-而且信息是误导性的——看到的人会以为主题脚本坏了。
-
-同一个机制也是 [`locale-switch.tsx`](src/components/ui/locale-switch.tsx) 里注释的那件事，
-不过语言切换用整页刷新绕开了它，见[语言切换为什么是整页刷新](#语言切换为什么是整页刷新)。
-
-**什么时候可以删掉这个 patch：** 先看
-[#397](https://github.com/pacocoursey/next-themes/issues/397) 是否已关闭并发版。升级
-next-themes 之后，把 `patchedDependencies` 那一条和 `patches/` 目录删掉，`bun install`，
-然后 `bun run dev` 登录一次（`router.refresh()` 那条路径），看控制台还有没有
-`Encountered a script tag` 这条警告。没有就说明上游修了，patch 可以永久移除。
-
-> patch 改的是压缩后的 `dist/`，所以 **next-themes 一升级 patch 必然失效**（`bun install`
-> 会直接报 patch 应用失败）。这是好事——它强制你在升级时重新走一遍上面那个验证步骤，而不是
-> 让一个陈旧的 patch 静默留在树里。
+[locale-switch.tsx](src/components/ui/locale-switch.tsx) 的语言菜单有个不直观的嵌套顺序：
+**`Tooltip` 必须包在 `Menu.Target` 外面，不能反过来。** `Tooltip` 会把自己不认识的 props
+原样转发给子元素，但转发目标是它内部的浮层标签，不是子元素本身；反过来嵌套
+（`Menu.Target` 包 `Tooltip`）会让 `aria-expanded` / `aria-haspopup` / `aria-controls`
+全部落在 tooltip 身上，触发按钮上什么都没有。另外 `Menu` 要显式关掉
+`withInitialFocusPlaceholder`——默认它会在下拉里塞一个 `role="presentation"` 的占位 div
+抢首个 focus，而 `role="menu"` 只能包 menu 相关的角色，axe 会报 critical 级的
+`aria-required-children`。
 
 ## 认证
 
@@ -1073,7 +1029,7 @@ requireSession(session)      → UnauthorizedError ← 共用的那一半
 **`/api/v1` 从第一天就带版本前缀。** 小程序是灰度发布的,老版本会继续调老形状一段时间,
 所以你需要一个能放 v2 而不破坏它们的地方。现在只花一个路径段,事后再加很痛。
 
-## 国际化## 国际化
+## 国际化
 
 中英双语，`zh` 是默认语言也是文案的**源语言**（`en.json` 是它的翻译）。
 
@@ -1126,10 +1082,10 @@ SEO 的 `alternateLinks` 响应头由 next-intl 默认开启，不用手写 `alt
 next-intl 的 `router.replace()`，有两个原因，改回软导航就会各自复现：
 
 1. **切换语言是全应用唯一跨 `[locale]` 段的导航。** 软导航会让 `app/[locale]/layout.tsx` 在客户端
-   重新渲染，而它持有 `<html>` 和 `<head>`——里面有 next-themes 注入的主题脚本。React 不会执行
-   自己在客户端创建的 `<script>`，只在控制台打一条
+   重新渲染，而它持有 `<html>` 和 `<head>`——里面有 Mantine 的 `<ColorSchemeScript>`。React 不会
+   执行自己在客户端创建的 `<script>`，只在控制台打一条
    *"Encountered a script tag while rendering React component"*（仅开发构建，但脚本确实被跳过了），
-   于是明暗主题会一直没设置到下一次硬加载。
+   于是明暗主题会一直停在 `mantineHtmlProps` 静态写的那个值上，直到下一次硬加载。
 2. **必须带 `forcePrefix`。** `localePrefix` 是 `as-needed`，所以裸的 `/settings` 是有歧义的，proxy
    会拿 `NEXT_LOCALE` cookie 去判断——而那时 cookie 还是**旧** locale，于是又被弹回去。导航到显式的
    `/zh/settings` 能让 proxy 改写 cookie 并自己把 URL 规范化成 `/settings`。next-intl 的 router 是靠
@@ -1192,8 +1148,10 @@ bun run lint:fix     # 修 lint + 格式化 + 排 import
 ⚠️ `biome.json` 是标准 JSON，**不支持注释**。加了注释配置会静默解析失败并退回 Biome 默认设置
 （双引号、带分号），`--write` 一跑就会把全项目格式反着改一遍。
 
-`biome.json` 里 `css.parser.tailwindDirectives: true` 不能删：没有它，Biome 的 CSS 解析器
-不认 `@source` / `@theme`，`globals.css` 会报解析错误而且不被格式化。
+`biome.json` 里 `css.parser.tailwindDirectives: true` 现在是死配置——项目里已经没有任何
+`@source` / `@theme` / `@apply`，这个开关当初是为 Tailwind 加的。留不留都不影响
+lint / format 的结果（验证过：关掉之后 `bun run lint` 输出完全一样），清理见
+[已知遗留与缺口](#已知遗留与缺口)。
 
 import 顺序也是 Biome 自动排的，分组顺序：`bun:`/`node:` → 第三方包 → `@/` 别名 → 相对路径 → 样式。
 项目内引用**统一用 `@/` 绝对路径**（`@/*` 映射到 `src/`）。
@@ -1225,14 +1183,15 @@ import 顺序也是 Biome 自动排的，分组顺序：`bun:`/`node:` → 第�
 
 ### 样式
 
-优先级：**Tailwind utility → HeroUI 语义变量 → `globals.css`**。
+优先级：**Mantine style props → `theme.ts` 的 `.extend()` → CSS Module →
+`mantine-overrides.css` → `globals.css`**——越靠后越难改，也越该是最后手段。
 
-- 颜色一律走语义 token（`bg-surface` / `text-muted` / `border-border` / `bg-accent-soft` …），
-  **不要写死 `#fff` / `#000`**，也不要用 Tailwind 的调色板（`bg-gray-100`）——那些不跟明暗切换。
-- `globals.css` 里该写什么，见[什么该写进 globals.css](#什么该写进-globalscss)——
-  能用 Tailwind utility 表达的就不要写进去。
+- 颜色一律走 Mantine 的语义变量（`c="dimmed"`、`color="red"`、`var(--mantine-color-text)`
+  这类），**不要写死 `#fff` / `#000`**——语义变量才会跟着明暗模式和 `theme.ts` 的调色板走。
+- `globals.css` 里该写什么，见[什么该写进 globals.css](#什么该写进-globalscss)。
 - 字体栈里必须带中文回退（`PingFang SC` / `Microsoft YaHei` / `Songti SC` / `Noto Serif SC`），
-  Roboto、Georgia 这些都没有 CJK 字形——`@theme` 里的 `--font-sans` / `--font-serif` 就是为这件事。
+  基础字体（`Geist`、`Georgia`）都没有 CJK 字形——`theme.ts` / `css-variables-resolver.ts` 里的
+  `FONT_FAMILY_*` 常量就是为这件事，见[UI 与主题](#ui-与主题)。
 
 ### 注释
 
@@ -1335,13 +1294,10 @@ stat -f %m data/dev.db && bun run test:unit && stat -f %m data/dev.db   # 两个
 - 浏览器语言在 `playwright.config.ts` 里锁成了 `zh-CN`，所以不带前缀的 URL 断言拿到的是中文；
   要测英文就显式访问 `/en/...`
 
-两个 react-aria 相关的断言技巧：
-
-- **checkbox / switch 的点击要落在可见元素上。** react-aria 把真正的 `<input>` 放在它自己的
-  装饰下面，Playwright 会报 "control intercepts pointer events"。断言用
-  `getByRole('checkbox')`，点击用 `[data-slot="checkbox-content"]`，见 `e2e/notes.e2e.ts`。
-- **`getByRole('alert')` 会撞上 Next 自己的 route announcer**（它也是 `role="alert"`），
-  按文案断言。
+一个断言技巧值得记：**`getByRole('alert')` 会撞上 Next 自己的 route announcer**
+（它也是 `role="alert"`），按文案断言。（Mantine 的 `Checkbox` / `Switch` 直接给真实的
+`<input>` 加样式，不像某些库把它藏在装饰元素下面——`getByRole('checkbox')` 之类可以直接点，
+不用额外的 `data-slot` 选择器，见 `e2e/notes.e2e.ts`。）
 
 ## 新增业务的标准流程
 
@@ -1508,33 +1464,21 @@ merge / revert / fixup 消息直接放过。
 `wcag2a` / `wcag2aa` / `wcag21a` / `wcag21aa`——`best-practice` 那组是值得读的意见，
 但不值得让构建失败，混进来会让这套检查噪音大到被关掉。
 
-这个项目本来就很在意 a11y（react-aria 底座、到处 `aria-label`、整个测试套件用
-`getByRole` 定位），但**加上 axe 之后一次就扫出三个真问题**：
+这个项目对无障碍很在意（到处 `aria-label`，整个测试套件用 `getByRole` 定位），但光靠人读
+代码防不住换主题带来的问题——**换成现在这套 shadcn 风格主题（见[UI 与主题](#ui-与主题)）
+之后，axe 一次就扫出三个真问题**：
 
-1. **`--muted` 对比度不够。** 浅色模式 `oklch(55.17% 0 0)` 对 `--background` 只有
-   **4.24:1**，WCAG AA 正文要求 4.5:1。改成 50% 后是 4.97:1。深色模式那份本来就是 8.04:1，
-   没动。
-2. **`--success` 和它的前景色配不出可读对比。** 白字配 `oklch(0.6277 …)` 只有 **3.13:1**，
-   改成 `0.52` 后 4.76:1。dashboard 把这些色号称作"底色 + 可读的前景色"——配不出可读度就是
-   这句话不成立。
-3. **dashboard 的 ProgressBar 没有可访问名称。** 它有一个可见的 `<p>` 标签，但 `<p>` 不是
-   label 元素，没有任何东西把两者关联起来，屏幕阅读器读到的是一个无名进度条。补了
-   `aria-label`。
+1. **`Danger` 按钮的白字在 `red-5` 填充上只有约 4.4:1。** WCAG AA 正文要求 4.5:1。改成
+   `red-6` 后约 5.9:1——`css-variables-resolver.ts` 里 `--mantine-color-red-filled` 现在指向
+   `red-6`。
+2. **`已上线` 徽标的白字在 `teal-5` 填充上只有约 3.5:1。** 改成 `teal-6` 后约 5.1:1，同一个
+   文件里改。
+3. **`SegmentedControl` 未选中项的 `dimmed` 文字在它自己浅灰色的底上只有约 4.4:1。**
+   `--mantine-color-dimmed`（浅色模式）从 `secondary-10` 改成 `secondary-6`，约 9.5:1。
 
-**唯一被禁用的规则是 `nested-interactive`**，原因是 HeroUI 的 `Tooltip` 会把你给它的东西
-包进它自己的可聚焦元素里：
-
-```html
-<div class="tooltip__trigger" role="button" tabindex="0">
-  <a aria-label="概览" …>…</a>
-</div>
-```
-
-可聚焦的 `role="button"` 里套一个可聚焦的链接是真问题（多一个 tab 停靠点，外层还报错了
-角色），但这是 **HeroUI 的标记而不是本项目的用法**——我们写的是
-`<Tooltip><Link/><Tooltip.Content/></Tooltip>`，包装是它加的，没有 prop 可以关掉。
-按规则名单独禁用（而不是跳过受影响的页面）保住了其余所有检查。见
-[已知遗留与缺口](#已知遗留与缺口)。
+三处都是**先跑测试拿到失败的具体元素，再改那一个颜色映射**，不是提前手算——这套主题有
+21 个颜色 × 好几个 variant，没被哪个页面渲染到的组合没法用 axe 验证，也就没有预先改。往后
+加新颜色的 `filled` / `light` 用法，照这个方法来：跑一遍 `e2e/a11y.e2e.ts`，测出来再补。
 
 > **axe 能查什么、不能查什么**：它查机器可判定的部分——对比度、缺失的表单标签、非法 ARIA、
 > 重复 id。它判断不了聚焦顺序是否合理，也判断不了一个标签是否**有意义**。
@@ -1552,8 +1496,9 @@ merge / revert / fixup 消息直接放过。
 - **`drizzle-orm` / `drizzle-kit` 一起**：共用迁移格式，单独升一个可能让 `db:generate`
   产出运行时读不了的 SQL。
 - **`next-auth` / `@auth/*` 永不批量、永不自动合并**：还是 5.x beta，beta 之间就有破坏性变更。
-- **`next-themes` 打了标签 `has-patch`**：它有 patch（见[明暗主题](#明暗主题)），
-  一升级 patch 必然失效、`bun install` 会直接报错——**这是好事**，它强制你重新验证一遍。
+- **`@mantine/*` 和 `postcss-preset-mantine` 一起**：每个 `@mantine/*` 包都把其余
+  `@mantine/*` 声明成精确版本的 peer dependency，单独升一个直接装不上；
+  `postcss-preset-mantine` 编译的是组件样式依赖的 CSS 特性，跟着一起升。
 - patch / minor 批量成一个 PR：三十个独立的版本号 PR 是"依赖 PR 开始被无视"的起点。
 
 ### 为什么没有做 i18n 文案裁剪
@@ -1684,10 +1629,9 @@ CI（`.github/workflows/ci.yml`）四个并行 job：`lint` / `typecheck` / `tes
 3. **`onRequestError` 只写日志，没有接错误上报服务。** 形状是对的，但生产环境应该换成
    Sentry / OTel，见[可观测性](#可观测性)。`register()` 目前只做 `AUTH_URL` 启动检查，
    没有 tracing。
-4. **rail 上的每个按钮都多一个 tab 停靠点。** HeroUI 的 `Tooltip` 会把子元素包进
-   `<div role="button" tabindex="0">`，于是可聚焦元素里套了可聚焦元素。这是库的标记不是用法
-   问题，没有 prop 能关掉；`e2e/a11y.e2e.ts` 因此单独禁用了 `nested-interactive` 这条规则，
-   理由写在那里。要真修得 patch HeroUI 或者把 rail 的 tooltip 去掉。
+4. **`biome.json` 里 `css.parser.tailwindDirectives: true` 是死配置。** 项目已经没有
+   Tailwind，这个开关当初是为它开的（见[编码规范](#编码规范)）。删不删都不影响任何
+   lint / format 结果，纯粹是清理债务，没人处理过。
 5. **错误边界没有常驻的自动化测试。** 渲染出来的部分由
    [ErrorState.test.tsx](src/components/ui/ErrorState.test.tsx) 覆盖，但"边界有没有真的接上"
    要靠一条故意抛错的路由，模板里不想常留这种东西。改完 `error.tsx` 之后照下面这样验一次
@@ -1737,12 +1681,12 @@ CI（`.github/workflows/ci.yml`）四个并行 job：`lint` / `typecheck` / `tes
 
 ### 主动放弃的东西（不是缺口）
 
-- **多主题切换器和 Material ripple**。姊妹模板 `next-template` 有 Notion / Material 2 /
-  Material 3 三套主题可以运行时切换，那建立在 Mantine 的 JS 主题对象和 per-component `styles`
-  API 上。HeroUI 3 的主题是 CSS 变量，做法完全不同，这里只保留默认主题 + 明暗两色。
-  要加第二套主题：在 `globals.css` 里写一组 `[data-theme='x']:not(.dark)` /
-  `[data-theme='x'].dark` 变量块（`:not(.dark)` / `.dark` 是为了压过 HeroUI 自己那份，
-  两者特异性相同、靠源码顺序分不出胜负），再自己管一个 cookie。
+- **多主题切换器和 Material ripple**。姊妹模板 `next-template` 用同一套机制（Mantine 的
+  JS 主题对象 + per-component `.extend()`）做了 Notion / Material 2 / Material 3 三套可
+  运行时切换的主题；这里只保留了一套（见[UI 与主题](#ui-与主题)），纯粹是范围选择，不是
+  技术限制——机制现在完全一样。要加第二套主题：写第二个 `createTheme()` 对象和第二个
+  `CSSVariablesResolver`，运行时按存起来的偏好选一个传给 `<MantineProvider theme={...}>`，
+  不用碰 CSS 选择器特异性。
 - **SQLite 的并发写入能力**。单文件数据库适合单实例部署；要多实例或高写入量，
   把 `DATABASE_URL` 换成 Turso 连接串（libsql 驱动本来就支持），或者换回 Postgres
   （改 `schema.ts` 的 import、`drizzle.config.ts` 的 dialect、以及 client 的驱动）。

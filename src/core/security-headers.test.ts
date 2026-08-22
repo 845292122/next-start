@@ -22,11 +22,11 @@ describe('buildContentSecurityPolicy', () => {
 	})
 
 	test('allows inline styles, and carries no nonce for them', () => {
-		// Deliberate, and the two halves are inseparable. react-aria injects its own
-		// unnonceable <style> at runtime, and the CSP spec says a directive
-		// containing a nonce *ignores* 'unsafe-inline' — so adding a nonce here
-		// would silently re-block react-aria's stylesheet. The long note in
-		// security-headers.ts has the full reasoning.
+		// Deliberate, and the two halves are inseparable. Mantine positions every
+		// overlay through inline `style` attributes, which a nonce can never cover,
+		// and the CSP spec says a directive containing a nonce *ignores*
+		// 'unsafe-inline' — so adding a nonce here would refuse all of them. The
+		// long note in security-headers.ts has the full reasoning.
 		const styleSrc = directive(csp(false), 'style-src')
 
 		expect(styleSrc).toBe("style-src 'self' 'unsafe-inline'")

@@ -2,8 +2,8 @@
 
 import { useTranslations } from 'next-intl'
 import { useEffect } from 'react'
-import { ErrorState, errorStateLinkClass } from '@/components/ui/ErrorState'
-import { Link } from '@/i18n/navigation'
+import { ButtonLink } from '@/components/ui/ButtonLink'
+import { ErrorState } from '@/components/ui/ErrorState'
 
 /**
  * Error boundary for the (app) group.
@@ -35,9 +35,9 @@ export default function AppGroupError({
 			description={t('description')}
 			retryLabel={t('retry')}
 			homeLink={
-				<Link href="/" replace className={errorStateLinkClass}>
+				<ButtonLink href="/" replace variant="default">
 					{t('backHome')}
-				</Link>
+				</ButtonLink>
 			}
 			digest={error.digest}
 			digestLabel={

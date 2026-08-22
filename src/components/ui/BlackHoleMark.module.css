@@ -1,0 +1,131 @@
+/*
+ * The rail's black-hole brand mark (BlackHoleMark.tsx).
+ *
+ * A CSS Module rather than style props: the parts that make it work are
+ * unreadable inline — a conic-gradient sweep and a radial mask that hollows each
+ * disk into a ring — and the @keyframes has to live in a stylesheet regardless.
+ *
+ * Deliberately no `perspective`. A fixed px perspective is a ratio against the
+ * element's size, so it looks right at one size and funnels the disks into a cone
+ * at any other — verified by rendering the mark at 48/96/224px. Plain `rotateX`
+ * is an orthographic projection instead: geometrically still 3D,
+ * scale-independent, and free of that distortion.
+ */
+
+.root {
+	position: relative;
+	display: grid;
+	place-items: center;
+	/* Keeps the disk/core z-indexes below from escaping into the page. */
+	isolation: isolate;
+}
+
+.disk {
+	position: absolute;
+	inset: 0;
+	border-radius: 50%;
+	/*
+	 * The sweep is the reason the rotation is visible at all — a uniformly
+	 * coloured ring looks identical at every angle, however fast it turns.
+	 *
+	 * `--mantine-color-dimmed` and `--mantine-color-text` rather than the primary
+	 * colour: the mark sits in a neutral rail, and a blue disk would read as a
+	 * loading spinner. Both variables flip with the colour scheme, so one
+	 * definition covers light and dark.
+	 */
+	background: conic-gradient(
+		from 0deg,
+		transparent 30deg,
+		var(--mantine-color-dimmed) 84deg,
+		var(--mantine-color-text) 118deg,
+		var(--mantine-color-dimmed) 152deg,
+		transparent 205deg
+	);
+	/*
+	 * Hollows out the middle: this is what makes it a ring, not a disc. The inner
+	 * edge sits close in on purpose — pushed further out the ring stops hugging
+	 * the core and the mark reads as a ringed planet instead.
+	 */
+	mask: radial-gradient(closest-side, transparent 44%, #000 56%);
+	animation: blackholeSpin 6s linear infinite;
+}
+
+/*
+ * One disk behind the core and one in front, so a bright arc visibly passes over
+ * the silhouette on every orbit — that crossing is what reads as depth.
+ * Counter-rotating at different speeds keeps them from moving as one rigid
+ * object.
+ */
+.diskBack {
+	--blackhole-tilt: 76deg;
+	z-index: 0;
+}
+
+.diskFront {
+	--blackhole-tilt: 66deg;
+	inset: 16%;
+	z-index: 3;
+	opacity: 0.8;
+	animation-duration: 3.8s;
+	animation-direction: reverse;
+}
+
+/*
+ * The photon ring — an untilted full circle just outside the core.
+ *
+ * This is the piece that makes the mark read as a black hole rather than as a
+ * ringed planet or an eye: the tilted disks above squash into two side lobes
+ * (which is geometrically right for a disk seen near edge-on, but reads as
+ * eyelids), so something has to close the circle. Real black-hole images get that
+ * closure from gravitational lensing bending the far side of the disk over the
+ * top; here it's just a static ring.
+ *
+ * Sized in percentages, not a px border, so it holds its proportions at any size
+ * the mark is rendered at.
+ */
+.ring {
+	position: absolute;
+	inset: 26%;
+	z-index: 1;
+	border-radius: 50%;
+	background: var(--mantine-color-dimmed);
+	mask: radial-gradient(closest-side, transparent 76%, #000 88%);
+}
+
+/*
+ * Event horizon. Dark in *both* schemes rather than inverting with the theme like
+ * the rest of the mark: a black hole that turns into a white ball in dark mode
+ * stops reading as a hole. In dark mode `--mantine-color-body` is the one token
+ * that sits behind the rail's surface, so the core genuinely recedes; the photon
+ * ring is what keeps the shape legible once the core no longer carries the
+ * contrast.
+ */
+.core {
+	position: absolute;
+	inset: 34%;
+	z-index: 2;
+	border-radius: 50%;
+	background: light-dark(var(--mantine-color-text), var(--mantine-color-body));
+}
+
+/*
+ * Both rings share these keyframes and differ only by `--blackhole-tilt`, which
+ * each one sets on itself — a custom property inside a @keyframes is resolved
+ * against the animated element, so one animation covers both.
+ */
+@keyframes blackholeSpin {
+	from {
+		transform: rotateX(var(--blackhole-tilt)) rotateZ(0deg);
+	}
+	to {
+		transform: rotateX(var(--blackhole-tilt)) rotateZ(360deg);
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.disk {
+		animation: none;
+		/* Hold the tilt and pick a sweep angle — still a 3D mark, just still. */
+		transform: rotateX(var(--blackhole-tilt)) rotateZ(40deg);
+	}
+}

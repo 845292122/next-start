@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
+import { MantineProvider } from '@mantine/core'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { NextIntlClientProvider } from 'next-intl'
@@ -8,6 +9,11 @@ import messages from '@/i18n/messages/zh.json'
  * Component test — run by `bun run test:dom`, which preloads test/setup.ts to
  * register happy-dom. Running it under the plain `test` script fails: the DOM
  * globals wouldn't exist.
+ *
+ * Every Mantine component reads the theme from `MantineProvider` and throws
+ * without one, so it wraps the tree below. `env="test"` is Mantine's own switch for
+ * this: it turns off transitions, which otherwise leave elements mounted-but-hidden
+ * for a few frames and make queries racy.
  */
 
 const signIn = mock(async (_provider: string, _options: unknown) => ({
@@ -29,9 +35,11 @@ const { LoginForm } = await import('@/features/auth/components/LoginForm')
 // missing message key fails the test instead of silently rendering a key name.
 function renderForm() {
 	return render(
-		<NextIntlClientProvider locale="zh" messages={messages}>
-			<LoginForm />
-		</NextIntlClientProvider>,
+		<MantineProvider env="test">
+			<NextIntlClientProvider locale="zh" messages={messages}>
+				<LoginForm />
+			</NextIntlClientProvider>
+		</MantineProvider>,
 	)
 }
 
@@ -78,8 +86,8 @@ describe('LoginForm', () => {
 		await user.type(screen.getByLabelText('手机号'), '123')
 		await user.click(screen.getByRole('button', { name: '获取验证码' }))
 
-		// react-hook-form's own trigger('phone') is what blocks this — no
-		// countdown should start, and the field should end up invalid.
+		// form.validateField('phone') is what blocks this — no countdown should
+		// start, and the field should end up invalid.
 		await waitFor(() => {
 			expect(screen.getByLabelText('手机号')).toHaveAttribute(
 				'aria-invalid',

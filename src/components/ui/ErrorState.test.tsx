@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, mock, test } from 'bun:test'
+import { MantineProvider } from '@mantine/core'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ErrorState } from '@/components/ui/ErrorState'
@@ -19,6 +20,9 @@ import messages from '@/i18n/messages/zh.json'
  * avoids mocking `@/i18n/navigation`, which would clobber `LoginForm.test.tsx`'s
  * mock of the same module (bun's `mock.module` is process-wide and `test:dom`
  * runs every file in one process).
+ *
+ * `MantineProvider` is the one wrapper that *is* required: Mantine components read
+ * the theme from it and throw without one. `env="test"` disables transitions.
  */
 
 // Real messages, so a renamed key fails the test instead of rendering the key
@@ -27,14 +31,16 @@ const t = messages.Errors
 
 function renderState(props: Partial<Parameters<typeof ErrorState>[0]> = {}) {
 	return render(
-		<ErrorState
-			title={t.title}
-			description={t.description}
-			retryLabel={t.retry}
-			homeLink={<a href="/">{t.backHome}</a>}
-			onRetry={() => {}}
-			{...props}
-		/>,
+		<MantineProvider env="test">
+			<ErrorState
+				title={t.title}
+				description={t.description}
+				retryLabel={t.retry}
+				homeLink={<a href="/">{t.backHome}</a>}
+				onRetry={() => {}}
+				{...props}
+			/>
+		</MantineProvider>,
 	)
 }
 

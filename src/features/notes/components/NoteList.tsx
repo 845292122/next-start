@@ -1,14 +1,25 @@
 'use client'
 
 import {
+	ActionIcon,
 	Button,
+	Center,
 	Checkbox,
+	CloseButton,
 	EmptyState,
-	SearchField,
-	Spinner,
-	toast,
-} from '@heroui/react'
-import { NotebookPen, Trash2 } from 'lucide-react'
+	Group,
+	Loader,
+	Paper,
+	Stack,
+	Text,
+	TextInput,
+} from '@mantine/core'
+import { notifications } from '@mantine/notifications'
+import {
+	MagnifyingGlassIcon,
+	NotePencilIcon,
+	TrashIcon,
+} from '@phosphor-icons/react'
 import { useFormatter, useTranslations } from 'next-intl'
 import { useState } from 'react'
 import useSWR from 'swr'
@@ -24,9 +35,9 @@ import { useActionErrorMessage } from '@/lib/action-error'
 /**
  * Search-as-you-type and optimistic updates, all on Server Actions.
  *
- * There used to be a second exposure path here — SWR against the route handlers
- * in `app/api/notes/`. It's gone: a Server Action works fine as an SWR fetcher,
- * so "the client needs to trigger this fetch" was never a reason to add a Route
+ * There used to be a second exposure path here — SWR against the route handlers in
+ * `app/api/notes/`. It's gone: a Server Action works fine as an SWR fetcher, so
+ * "the client needs to trigger this fetch" was never a reason to add a Route
  * Handler (see AGENTS.md). Those handlers remain as the worked example of the
  * external-consumer path, but nothing in this app calls them.
  */
@@ -72,13 +83,14 @@ export function NoteList({
 			// misses the cache and fetches.
 			fallbackData: query || limit !== pageSize ? undefined : initial,
 			keepPreviousData: true,
-			onError: (error: Error) => toast.danger(error.message),
+			onError: (error: Error) =>
+				notifications.show({ color: 'red', message: error.message }),
 		},
 	)
 
 	async function toggle(note: NoteDTO) {
-		// Optimistic: flip locally, then let the response confirm. `revalidate`
-		// stays on so a failed toggle rolls the row back.
+		// Optimistic: flip locally, then let the response confirm. `revalidate` stays
+		// on so a failed toggle rolls the row back.
 		await mutate(
 			async () => {
 				const result = await toggleNoteAction({ id: note.id })
@@ -95,7 +107,9 @@ export function NoteList({
 				rollbackOnError: true,
 				populateCache: false,
 			},
-		).catch((error: Error) => toast.danger(error.message))
+		).catch((error: Error) =>
+			notifications.show({ color: 'red', message: error.message }),
+		)
 	}
 
 	async function remove(note: NoteDTO) {
@@ -115,101 +129,106 @@ export function NoteList({
 				rollbackOnError: true,
 				populateCache: false,
 			},
-		).catch((error: Error) => toast.danger(error.message))
+		).catch((error: Error) =>
+			notifications.show({ color: 'red', message: error.message }),
+		)
 	}
 
 	return (
-		<div className="flex flex-col gap-4">
-			<SearchField
+		<Stack gap="md">
+			{/*
+			 * type="search" is not cosmetic: it's what gives the input
+			 * role="searchbox", which is how the e2e suite finds it and how assistive
+			 * tech announces it.
+			 */}
+			<TextInput
+				type="search"
 				value={query}
-				onChange={setQuery}
+				onChange={(event) => setQuery(event.currentTarget.value)}
 				aria-label={t('searchLabel')}
-			>
-				<SearchField.Group>
-					<SearchField.SearchIcon />
-					<SearchField.Input placeholder={t('searchPlaceholder')} />
-					<SearchField.ClearButton />
-				</SearchField.Group>
-			</SearchField>
+				placeholder={t('searchPlaceholder')}
+				leftSection={<MagnifyingGlassIcon size={16} />}
+				rightSection={
+					query ? (
+						<CloseButton
+							size="sm"
+							aria-label={t('searchClear')}
+							onClick={() => setQuery('')}
+						/>
+					) : undefined
+				}
+				rightSectionPointerEvents="all"
+			/>
 
 			{isLoading && !page ? (
-				<div className="flex justify-center p-8">
-					<Spinner />
-				</div>
+				<Center p="xl">
+					<Loader />
+				</Center>
 			) : page?.items.length ? (
-				<ul className="flex flex-col gap-2">
+				<Stack component="ul" gap="xs" p={0} style={{ listStyle: 'none' }}>
 					{page.items.map((note) => (
-						<li
-							key={note.id}
-							className="border-border bg-surface flex items-start gap-3 rounded-xl border p-4"
-						>
-							{/*
-							 * Checkbox.Content is the interactive element (react-aria's
-							 * CheckboxButton), so the control has to sit inside it —
-							 * putting Control directly under Checkbox renders a box with
-							 * nothing to click and no `checkbox` role.
-							 */}
-							<Checkbox
-								isSelected={note.done}
-								onChange={() => toggle(note)}
-								aria-label={t('toggleLabel', { title: note.title })}
-								className="mt-0.5"
-							>
-								<Checkbox.Content>
-									<Checkbox.Control>
-										<Checkbox.Indicator />
-									</Checkbox.Control>
-								</Checkbox.Content>
-							</Checkbox>
-							<div className="min-w-0 flex-1">
-								<p
-									className={
-										note.done
-											? 'text-muted font-medium line-through'
-											: 'font-medium'
-									}
+						<Paper key={note.id} component="li" withBorder radius="md" p="md">
+							<Group align="flex-start" gap="sm" wrap="nowrap">
+								{/*
+								 * Mantine's Checkbox is a real, visible <input
+								 * type="checkbox"> — no hidden input under a styled proxy — so
+								 * a click lands on the same element the assertions read.
+								 */}
+								<Checkbox
+									mt={2}
+									checked={note.done}
+									onChange={() => toggle(note)}
+									aria-label={t('toggleLabel', { title: note.title })}
+								/>
+								<div style={{ minWidth: 0, flex: 1 }}>
+									<Text
+										fw={500}
+										td={note.done ? 'line-through' : undefined}
+										c={note.done ? 'dimmed' : undefined}
+									>
+										{note.title}
+									</Text>
+									{note.body && (
+										<Text
+											size="sm"
+											c="dimmed"
+											mt={2}
+											style={{ wordBreak: 'break-word' }}
+										>
+											{note.body}
+										</Text>
+									)}
+									<Text size="xs" c="dimmed" mt={4}>
+										{/*
+										 * createdAt is an ISO string, not a Date — see
+										 * features/notes/dto.ts for why. next-intl's formatter needs
+										 * a Date, hence the parse here.
+										 */}
+										{format.dateTime(new Date(note.createdAt), {
+											dateStyle: 'medium',
+											timeStyle: 'short',
+										})}
+									</Text>
+								</div>
+								<ActionIcon
+									variant="subtle"
+									color="red"
+									aria-label={t('deleteLabel', { title: note.title })}
+									onClick={() => remove(note)}
 								>
-									{note.title}
-								</p>
-								{note.body && (
-									<p className="text-muted mt-0.5 text-sm break-words">
-										{note.body}
-									</p>
-								)}
-								<p className="text-muted mt-1 text-xs">
-									{/*
-									 * createdAt is an ISO string, not a Date — see
-									 * features/notes/dto.ts for why. next-intl's formatter needs a
-									 * Date, hence the parse here.
-									 */}
-									{format.dateTime(new Date(note.createdAt), {
-										dateStyle: 'medium',
-										timeStyle: 'short',
-									})}
-								</p>
-							</div>
-							<Button
-								variant="ghost"
-								size="sm"
-								isIconOnly
-								aria-label={t('deleteLabel', { title: note.title })}
-								onPress={() => remove(note)}
-							>
-								<Trash2 className="text-danger size-4" />
-							</Button>
-						</li>
+									<TrashIcon size={16} />
+								</ActionIcon>
+							</Group>
+						</Paper>
 					))}
-				</ul>
+				</Stack>
 			) : (
-				<EmptyState className="py-10">
-					<NotebookPen className="text-muted size-8" />
-					<p className="mt-3 font-medium">
-						{query ? t('noResults') : t('empty')}
-					</p>
-					<p className="text-muted text-sm">
-						{query ? t('noResultsHint') : t('emptyHint')}
-					</p>
-				</EmptyState>
+				<EmptyState
+					py="xl"
+					icon={<NotePencilIcon size={32} />}
+					title={query ? t('noResults') : t('empty')}
+					description={query ? t('noResultsHint') : t('emptyHint')}
+				/>
 			)}
 
 			{/*
@@ -218,14 +237,14 @@ export function NoteList({
 			 */}
 			{page && page.total > page.items.length && (
 				<Button
-					variant="secondary"
-					className="self-center"
-					isPending={isLoading}
-					onPress={() => setLimit((current) => current + pageSize)}
+					variant="default"
+					loading={isLoading}
+					onClick={() => setLimit((current) => current + pageSize)}
+					style={{ alignSelf: 'center' }}
 				>
 					{t('loadMore', { remaining: page.total - page.items.length })}
 				</Button>
 			)}
-		</div>
+		</Stack>
 	)
 }
