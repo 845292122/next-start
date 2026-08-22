@@ -1,6 +1,14 @@
 'use client'
 
-import { ActionIcon, Box, Flex, Progress, Stack, Tooltip } from '@mantine/core'
+import {
+	ActionIcon,
+	Burger,
+	AppShell as MantineAppShell,
+	Progress,
+	Stack,
+	Tooltip,
+} from '@mantine/core'
+import { useDisclosure } from '@mantine/hooks'
 import type { TablerIcon } from '@tabler/icons-react'
 import Link, { useLinkStatus } from 'next/link'
 import { usePathname } from 'next/navigation'
@@ -81,6 +89,7 @@ function NavItem({
 export function AppShell({ children }: { children: React.ReactNode }) {
 	const pathname = usePathname()
 	const [pendingCount, setPendingCount] = useState(0)
+	const [opened, { toggle, close }] = useDisclosure(false)
 
 	// A counter rather than a boolean: clicking a second link while the first is
 	// still pending would otherwise clear the bar too early.
@@ -88,50 +97,84 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 		setPendingCount((count) => count + delta)
 	}, [])
 
+	// The mobile navbar is a slide-in overlay, not a resize — it stays open
+	// across a navigation unless told otherwise, and left open it would cover
+	// the page that link just went to.
+	// biome-ignore lint/correctness/useExhaustiveDependencies: close (from useDisclosure) is stable; biome's own fix suggestions for this line contradict each other between runs.
+	useEffect(() => {
+		close()
+	}, [pathname, close])
+
 	return (
 		/*
-		 * Hand-built rather than Mantine's `<AppShell>` component: that one positions
-		 * its navbar `fixed` and lets the *document* scroll, while this shell gives
-		 * the content area its own scroll container (see AppShell.module.css) so the
-		 * rail and the loading bar stay put with no width math. Nothing else it
-		 * offers — a header, responsive collapse, a burger — is used here.
+		 * `h`/`overflow: hidden` on the root plus `classes.content`'s own
+		 * `overflow: auto` on `Main` is what keeps this the same shape as before
+		 * Mantine's `<AppShell>` replaced the hand-rolled version: the content area
+		 * scrolls, the rail/header/loading bar don't, with no width math against the
+		 * rail. That property doesn't come from `<AppShell>` itself — its `Main` is
+		 * an ordinary flow element that just gets padding to clear the navbar/header,
+		 * so this file has to add the scroll containment back explicitly.
 		 */
-		<Flex h="100dvh" style={{ overflow: 'hidden' }}>
-			{/* Left rail */}
-			<Stack
-				component="nav"
-				aria-label="主导航"
-				w={RAIL_WIDTH}
-				align="center"
-				gap="lg"
-				py="lg"
-				style={{ flexShrink: 0 }}
-			>
-				{/* mb on top of the Stack gap — the mark wants noticeably more air under
-				    it than the nav squares want between themselves. */}
-				<BlackHoleMark size={48} mb="lg" />
-
-				<Stack flex={1} align="center" gap="sm">
-					{navLinks.map((link) => (
-						<NavItem
-							key={link.href}
-							href={link.href}
-							icon={link.icon}
-							label={link.label}
-							active={pathname === link.href}
-							onPending={onPending}
-						/>
-					))}
+		<MantineAppShell
+			header={{ height: { base: 60, sm: 0 } }}
+			navbar={{
+				width: RAIL_WIDTH,
+				breakpoint: 'sm',
+				collapsed: { mobile: !opened },
+			}}
+			padding={0}
+			h="100dvh"
+			style={{ overflow: 'hidden' }}
+		>
+			{/* Only ever visible below `sm` — see the responsive `header.height` above,
+			    which collapses it to nothing on wider screens. `hiddenFrom` on top of
+			    that pulls the burger out of the desktop tab order rather than just
+			    hiding it visually. */}
+			<MantineAppShell.Header hiddenFrom="sm">
+				<Stack h="100%" justify="center" px="md">
+					<Burger
+						opened={opened}
+						onClick={toggle}
+						size="sm"
+						// The icon flips to a close (X) glyph when opened — the label has
+						// to say what the button now *does*, not what it always does,
+						// or a screen reader hears "open navigation" on a button that
+						// would close it.
+						aria-label={opened ? '关闭导航' : '打开导航'}
+					/>
 				</Stack>
+			</MantineAppShell.Header>
 
-				<Stack align="center" gap={4}>
-					<ColorModeButton />
-					<SignOutButton />
+			<MantineAppShell.Navbar aria-label="主导航">
+				<Stack h="100%" align="center" gap="lg" py="lg">
+					{/* Hidden on mobile: the header above already carries the mark while
+					    the navbar is collapsed, and showing it twice when the drawer opens
+					    over that same header would be redundant. mb on top of the Stack
+					    gap — the mark wants noticeably more air under it than the nav
+					    squares want between themselves. */}
+					<BlackHoleMark size={48} mb="lg" visibleFrom="sm" />
+
+					<Stack style={{ flex: 1 }} align="center" gap="sm">
+						{navLinks.map((link) => (
+							<NavItem
+								key={link.href}
+								href={link.href}
+								icon={link.icon}
+								label={link.label}
+								active={pathname === link.href}
+								onPending={onPending}
+							/>
+						))}
+					</Stack>
+
+					<Stack align="center" gap={4}>
+						<ColorModeButton />
+						<SignOutButton />
+					</Stack>
 				</Stack>
-			</Stack>
+			</MantineAppShell.Navbar>
 
-			{/* Content area */}
-			<Box pos="relative" flex={1} miw={0} style={{ overflow: 'hidden' }}>
+			<MantineAppShell.Main pos="relative" style={{ overflow: 'hidden' }}>
 				{pendingCount > 0 && (
 					/*
 					 * Mantine has no indeterminate progress bar; a full-width animated
@@ -157,7 +200,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 				<div key={pathname} className={classes.content}>
 					{children}
 				</div>
-			</Box>
-		</Flex>
+			</MantineAppShell.Main>
+		</MantineAppShell>
 	)
 }
