@@ -13,17 +13,16 @@ import {
 import { IconAlertTriangle } from '@tabler/icons-react'
 
 /**
- * The shared body of the error boundaries — `app/[locale]/error.tsx` and
- * `app/[locale]/(app)/error.tsx` differ only in what wraps them, so the visible
- * part lives here once.
+ * The shared body of the error boundaries — `app/error.tsx` and
+ * `app/(app)/error.tsx` differ only in what wraps them, so the visible part
+ * lives here once.
  *
- * Takes finished strings rather than calling `useTranslations` itself: that keeps
- * it usable from a boundary that has no i18n provider above it. (`global-error` is
- * exactly that case, but it deliberately doesn't use this component either — see
- * the note in app/global-error.tsx.)
+ * Takes finished strings rather than owning them itself, which keeps it usable
+ * from `global-error.tsx` too — except that boundary deliberately doesn't use
+ * this component either (see the note there).
  *
- * Shape follows (app)/403/page.tsx and [locale]/not-found.tsx so the three error
- * screens read as one family.
+ * Shape follows (app)/403/page.tsx and not-found.tsx so the three error screens
+ * read as one family.
  */
 export function ErrorState({
 	title,
@@ -41,7 +40,7 @@ export function ErrorState({
 	 * The "back to safety" link, supplied by the caller.
 	 *
 	 * A slot rather than an `href` prop so this component imports nothing from
-	 * `@/i18n/navigation`. That keeps it renderable in a plain component test
+	 * `next/navigation`. That keeps it renderable in a plain component test
 	 * without mocking that module — and mocking it here would clobber
 	 * `LoginForm.test.tsx`'s mock of the same module, because bun's `mock.module`
 	 * is process-wide and the dom suite runs every file in one process.

@@ -1,6 +1,6 @@
 # 项目技术文档
 
-一个全栈 Next.js 模板：App Router + Mantine + Drizzle/SQLite + Auth.js + next-intl，包管理和运行时都用 Bun。
+一个全栈 Next.js 模板：App Router + Mantine + Drizzle/SQLite + Auth.js，包管理和运行时都用 Bun。
 
 > ⚠️ 动手之前先看 [AGENTS.md](AGENTS.md)：这个仓库用的 Next.js 版本有 breaking changes，API 和约定
 > 可能和你记忆里的不一样。写代码前查 `node_modules/next/dist/docs/` 里对应的文档。
@@ -19,8 +19,8 @@
   - [什么该写进 globals.css](#什么该写进-globalscss)
 - [认证](#认证)
   - [多端认证:一个验证核心,两种传输](#多端认证一个验证核心两种传输)
-- [国际化](#国际化)
-  - [SEO 与元数据](#seo-与元数据)
+- [SEO 与元数据](#seo-与元数据)
+  - [两个实际踩到的坑](#两个实际踩到的坑)
 - [编码规范](#编码规范)
 - [测试](#测试)
 - [新增业务的标准流程](#新增业务的标准流程)
@@ -44,7 +44,6 @@
 | 数据库 | SQLite | 单文件，无需服务或容器；驱动是 `@libsql/client` |
 | ORM / 迁移 | Drizzle 0.45 + drizzle-kit 0.31 | schema 就是 TS，迁移 SQL 进版本库 |
 | 认证 | Auth.js（next-auth 5 beta） | Credentials provider + JWT session + `@auth/drizzle-adapter` |
-| 国际化 | next-intl 4.13 | 中英双语，`[locale]` 路由段 + `src/proxy.ts` |
 | 表单 | `@mantine/form` | 用 `schemaResolver()` 直接吃 Zod schema（Standard Schema） |
 | 校验 | Zod 4 | 表单、Route Handler、Server Action 共用同一份 schema |
 | 客户端数据 | SWR 2.5 | 需要客户端搜索/轮询/乐观更新时用 |
@@ -63,32 +62,31 @@
 
 ```
 src/app/
-├── [locale]/           # 所有渲染 HTML 的路由都在这一段下
-│   ├── layout.tsx      # 根布局（没有 src/app/layout.tsx）
-│   ├── error.tsx       # (app) 之外的错误边界（登录页、404 兜底……）
-│   ├── (app)/          # 已登录区：带左侧导航栏（rail），layout 里有登录拦截
-│   │   ├── layout.tsx  # 校验 session + 套一层 <AppShell>
-│   │   ├── error.tsx   # 错误边界，渲染在 rail 里面
-│   │   ├── loading.tsx # Suspense fallback，同样在 rail 里面
-│   │   ├── page.tsx    # 即 "/"，307 跳到 /dashboard
-│   │   ├── dashboard/  # 设计系统的活文档页
-│   │   ├── notes/      # 完整业务示例
-│   │   ├── settings/   # 占位页，新页面可以拷这个开头
-│   │   └── 403/        # 无权限页
-│   ├── (auth)/         # 全屏区：不带 rail，也不要求登录
-│   │   └── login/
-│   ├── not-found.tsx   # 本段抛 notFound() 时渲染
-│   └── [...rest]/      # 未匹配 URL 的兜底，只调 notFound()
-├── api/                # Route Handlers —— 注意在 [locale] 之外
+├── layout.tsx          # 根布局，所有渲染 HTML 的路由都在它下面
+├── error.tsx           # (app) 之外的错误边界（登录页、404 兜底……）
+├── (app)/              # 已登录区：带左侧导航栏（rail），layout 里有登录拦截
+│   ├── layout.tsx      # 校验 session + 套一层 <AppShell>
+│   ├── error.tsx       # 错误边界，渲染在 rail 里面
+│   ├── loading.tsx     # Suspense fallback，同样在 rail 里面
+│   ├── page.tsx        # 即 "/"，307 跳到 /dashboard
+│   ├── dashboard/      # 设计系统的活文档页
+│   ├── notes/          # 完整业务示例
+│   ├── settings/       # 占位页，新页面可以拷这个开头
+│   └── 403/            # 无权限页
+├── (auth)/             # 全屏区：不带 rail，也不要求登录
+│   └── login/
+├── not-found.tsx       # 本段抛 notFound() 时渲染
+├── [...rest]/          # 未匹配 URL 的兜底，只调 notFound()
+├── api/                # Route Handlers
 │   ├── auth/[...nextauth]/
 │   ├── health/         # 健康检查（不鉴权），见[可观测性](#可观测性)
 │   ├── v1/             # 只认 Bearer 的对外 API（小程序/App）
 │   │   ├── auth/wechat/    # 唯一不鉴权的 v1 路由：换 token
 │   │   └── notes/
 │   └── notes/          # 外部消费者路径的示例，应用自己不调
-├── robots.ts           # /robots.txt —— 在 [locale] 外面（按 origin）
-├── sitemap.ts          # /sitemap.xml —— 同上
-├── manifest.ts         # /manifest.webmanifest —— 同上，且无法本地化
+├── robots.ts           # /robots.txt（按 origin）
+├── sitemap.ts          # /sitemap.xml
+├── manifest.ts         # /manifest.webmanifest
 ├── global-error.tsx    # 根布局自己炸掉时的最后兜底，零 import
 ├── favicon.ico
 └── globals.css         # 文档级全局 CSS，不是唯一样式入口，见[UI 与主题](#ui-与主题)
@@ -96,25 +94,21 @@ src/app/
 
 约定与注意：
 
-- **括号目录是路由组，不进 URL。** `[locale]/(app)/dashboard/page.tsx` 对应 `/dashboard`（中文）
-  或 `/en/dashboard`（英文）。分组的意义是让两组页面用不同的 layout——`(app)` 有 rail 且要求登录，
-  `(auth)` 都没有。
-- **`api/` 必须留在 `[locale]` 外面。** Route Handler 不需要布局也不需要语言前缀，
-  `src/proxy.ts` 的 matcher 也把 `/api` 排除掉了。
-- **根布局是 [src/app/\[locale\]/layout.tsx](src/app/%5Blocale%5D/layout.tsx)，仓库里没有
-  `src/app/layout.tsx`。** 它干四件事：校验 `params.locale`（非法值走 `notFound()`）、
-  `setRequestLocale()`、`await auth()` 拿 session 传给 Provider、给 `<html>` 摊上
-  `mantineHtmlProps`（里面就是 `data-mantine-color-scheme="light"` 和
-  `suppressHydrationWarning`，见 [UI 与主题](#ui-与主题)）并在 `<head>` 里渲染
-  `<ColorSchemeScript>`。
+- **括号目录是路由组，不进 URL。** `(app)/dashboard/page.tsx` 对应 `/dashboard`。分组的意义是
+  让两组页面用不同的 layout——`(app)` 有 rail 且要求登录，`(auth)` 都没有。
+- **根布局是 [src/app/layout.tsx](src/app/layout.tsx)。** 它干三件事：`await auth()` 拿
+  session 传给 Provider、给 `<html>` 摊上 `mantineHtmlProps`（里面就是
+  `data-mantine-color-scheme="light"` 和 `suppressHydrationWarning`，见
+  [UI 与主题](#ui-与主题)）并在 `<head>` 里渲染 `<ColorSchemeScript>`。
   它是动态渲染的（读了 session），别指望这一层有静态优化。
-- **`[...rest]/page.tsx` 不能删。** 没有它，未匹配的路径会去找（不存在的）根 `not-found`，
-  渲染出 Next 内置的 404 而不是我们自己的页面。
+- **`[...rest]/page.tsx` 不能删。** 实测过：没有它，未匹配的路径会去找 Next 内置的 404，
+  而不是我们自己的 `not-found.tsx`——这不是某个特定路由段的怪癖，是这个版本 Next 的普遍行为，
+  删掉它 `e2e/shell.e2e.ts` 的 404 用例会当场挂。
 - **`not-found.tsx` 故意不套 `AppShell`。** 套了就要有 session，而 404 对未登录访客也得能渲染。
 - **三个错误边界是三个不同的位置，不是重复。** `error.tsx` 永远不包住**自己那一段的
   layout**，所以：`(app)/error.tsx` 渲染在 `AppShell` 里面（rail 还在，用户能导航走）；
-  `[locale]/error.tsx` 接住 (app) 之外的页面，以及 `(app)/layout.tsx` 自己抛的错；
-  `global-error.tsx` 接住 `[locale]/layout.tsx` 自己抛的错，此时连 `<html>` 都得它自己渲染。
+  `app/error.tsx` 接住 (app) 之外的页面，以及 `(app)/layout.tsx` 自己抛的错；
+  `global-error.tsx` 接住 `app/layout.tsx` 自己抛的错，此时连 `<html>` 都得它自己渲染。
   详见[错误处理](#错误处理)。
 - Route Handler 里**每个 handler 自己校验会话**——`(app)/layout.tsx` 的守卫管不到它们，
   见[认证](#认证)。
@@ -128,22 +122,25 @@ src/app/
 src/components/
 ├── layout/     # 应用外壳：AppShell.tsx + NavLinks.ts
 ├── providers/  # 全局 Provider（AppProviders.tsx）+ Mantine 主题（theme.ts / css-variables-resolver.ts / mantine-overrides.css）
-└── ui/         # 通用小部件：BlackHoleMark / ButtonLink / ErrorState / LoginHero / color-mode / locale-switch / sign-out-button
+└── ui/         # 通用小部件：BlackHoleMark / ButtonLink / ErrorState / LoginHero / color-mode / sign-out-button
 ```
 
 规则：**这里不写业务逻辑，也不碰数据库。** 只依赖 props、Mantine 和 session。要用到某个业务域的
 东西，说明它该放 `features/`。
 
 - [src/components/layout/NavLinks.ts](src/components/layout/NavLinks.ts)：rail 的导航项清单，
-  加页面要来这里加一条。注意 `labelKey` 是消息 key 而不是文案——这个模块不是组件，调不了 hook。
+  加页面要来这里加一条。
 - [src/components/ui/color-mode.tsx](src/components/ui/color-mode.tsx)：`useColorMode()` 的
   公开 API（`colorMode` / `mode` / `setMode` / `toggleColorMode`）和姊妹模板保持一致，
   内部换成了 Mantine 的 `useMantineColorScheme` + `useComputedColorScheme`，所以调用方的代码
   可以互搬。
 - [src/components/ui/ButtonLink.tsx](src/components/ui/ButtonLink.tsx)：一个 `'use client'` 的
-  薄壳，就为了 `<Button component={Link}>`。**Server Component 里写不了这一句**——RSC 环境下
-  next-intl 的 `Link` 是服务端组件，把它当 prop 传给（必然是客户端组件的）Mantine 组件会报
-  "Functions cannot be passed directly to Client Components"。403 / 404 两个页面因此走这个壳。
+  薄壳，就为了 `<Button component={Link}>`。**Server Component 里写不了这一句**，且跟
+  `Link` 是哪个库的无关：把一个组件*引用*当成 prop 值（而不是当 JSX 用）传给 Client
+  Component，等于把一个函数塞进 props，RSC 序列化不了函数（除非标了 `'use server'`），报
+  "Functions cannot be passed directly to Client Components"。实测验证过——直接在
+  `(app)/403/page.tsx` 里写 `<Button component={Link} href="/">`（`Link` 来自
+  `next/link`）复现同一个错误。403 / 404 两个页面因此走这个壳。
 
 ### `src/features/<域>/` — 单个业务域的前端组织
 
@@ -171,7 +168,7 @@ src/core/
 ├── logger.ts           # pino 实例 + 脱敏 + loggablePath()
 ├── request-id.ts       # x-request-id 的来源与读取，见[可观测性](#可观测性)
 ├── security-headers.ts # CSP 与固定安全响应头的值，见[安全](#安全)
-├── site-url.ts         # 绝对 URL / locale 前缀 / hreflang，见 [SEO](#seo-与元数据)
+├── site-url.ts         # 绝对 URL 的唯一来源，见 [SEO](#seo-与元数据)
 ├── rate-limit.ts       # 内存限流器（单实例够用，多实例要换 Redis）
 ├── zod-config.ts       # 浏览器里关掉 zod 的 JIT（CSP 会把它当 eval）
 ├── errors.ts           # 错误词表：AppError 及子类，每个带一个 code
@@ -224,18 +221,16 @@ src/core/
 | --- | --- |
 | `drizzle/` | `drizzle-kit generate` 生成的迁移 SQL 和 `meta/` 快照。**进版本库，不手改** |
 | `drizzle.config.ts` | drizzle-kit 的配置：dialect、schema 路径、输出目录、连接串 |
-| `src/i18n/` | next-intl 的配置与文案，见[国际化](#国际化) |
-| `src/proxy.ts` | Next 16 的中间件（旧名 `middleware.ts`）。**做 locale 解析 + 注入 `x-request-id` + 每请求 CSP nonce，不管登录态**。Next 16 起默认跑 Node runtime |
+| `src/proxy.ts` | Next 16 的中间件（旧名 `middleware.ts`）。**注入 `x-request-id` + 每请求 CSP nonce，不管登录态**。Next 16 起默认跑 Node runtime |
 | `src/instrumentation.ts` | `onRequestError`：接住渲染期异常，把 digest 和真实堆栈写在一起，见[可观测性](#可观测性) |
 | `src/lib/` | 不属于某个业务域的通用工具：目前只有 `action-error.ts`（把 `ActionResult` 的 `code` 翻成文案，见[错误处理](#错误处理)） |
-| `src/types/messages.d.ts` | 把 `zh.json` 的形状喂给 next-intl 的 `AppConfig`，让 `t('key')` 受类型检查 |
 | `e2e/` | Playwright 用例，文件名必须是 `*.e2e.ts`；`auth.setup.ts` 是登录态的来源 |
 | `test/setup.ts` | happy-dom + jest-dom 注册。**只由 `test:dom` 脚本 `--preload`**，见[测试](#测试) |
 | `test/unit-setup.ts` | 把 `DATABASE_URL` 顶成 `:memory:`。**只由 `test:unit` 脚本 `--preload`**，见[测试](#测试) |
 | `biome.json` | 格式化 + lint + import 排序规则 |
 | `playwright.config.ts` | E2E 配置：setup project + `webServer` 跑 db:reset → build → start |
 | `postcss.config.mjs` | `postcss-preset-mantine` + `postcss-simple-vars`（断点变量），见[UI 与主题](#ui-与主题) |
-| `next.config.ts` | next-intl 插件 + `serverExternalPackages`（libsql 的原生模块不能打包）+ 固定安全响应头 |
+| `next.config.ts` | `serverExternalPackages`（libsql 的原生模块不能打包）+ 固定安全响应头 |
 | `Dockerfile` / `.dockerignore` | 单实例生产镜像，见[部署](#部署)。**未构建验证过** |
 | `bunfig.toml` | 只有 `[test]` 的覆盖率配置。**别在这里加全局 `preload`**，见[测试](#测试) |
 | `lefthook.yml` | Git 钩子（pre-commit 格式化 + commit-msg 校验），见[工程化关卡](#工程化关卡) |
@@ -249,8 +244,7 @@ src/app/ (路由、页面)
   ├─→ src/features/<域>/   业务域的 schema / actions / dto / 专属组件
   │      └─→ src/core/     服务端能力
   ├─→ src/components/      通用展示层（不依赖 core）
-  ├─→ src/core/            页面也可以直接调 service
-  └─→ src/i18n/            文案与 locale 感知的导航
+  └─→ src/core/            页面也可以直接调 service
                 src/lib/   两边都能用
 ```
 
@@ -419,10 +413,10 @@ import type { Note } from '@/core/db/schema'   // = typeof notesTable.$inferSele
 - **`INTERNAL` 只暴露 code，别的什么都不给。** 原始异常挂在 `cause` 上，只进日志。
   `core/http.test.ts` 里有一条用例专门断言 `SQLITE_BUSY` 和文件路径不会出现在响应体里。
 
-`fields` 字段带的是**出错的字段名，不带文案**。项目里的 schema 一律不写 locale 相关的
-消息（原因见 [core/auth/schema.ts](src/core/auth/schema.ts)），zod 自带的消息又是英文，
-所以客户端拿字段名自己去翻译。空数组会被基类归一化成 `undefined`，因此"`fields` 存在"
-永远意味着"确实能归到这些字段"。
+`fields` 字段带的是**出错的字段名，不带文案**。项目里的 schema 一律不写人话文案
+（原因见 [core/auth/schema.ts](src/core/auth/schema.ts)），zod 自带的消息又是英文，
+所以客户端拿字段名去查自己的中文文案表。空数组会被基类归一化成 `undefined`，因此
+"`fields` 存在"永远意味着"确实能归到这些字段"。
 
 ### Server Action：返回值，不是异常
 
@@ -453,7 +447,7 @@ export async function createNoteAction(
     input,
     handler: async (parsed, session) => {
       const note = await createNote(session.user.id, parsed)
-      revalidatePath('/[locale]/notes', 'page')
+      revalidatePath('/notes', 'page')
       return toNoteDTO(note)
     },
   })
@@ -493,7 +487,7 @@ export const PATCH = withHandler<RouteContext<'/api/notes/[id]'>>(
 ```
 
 - **`RouteContext<'/api/...'>` 是 Next 生成的全局类型**，`params` 的类型直接跟着路由路径走，
-  不用手写一份会漂移的副本。和 layout 里的 `LayoutProps<'/[locale]'>` 是同一套东西。
+  不用手写一份会漂移的副本。和 layout 里的 `LayoutProps<'/'>` 是同一套东西。
 - **body 用 `readJson(request, schema)`，不要 `schema.parse(await request.json())`。**
   后者有两条都会变成 500 的路径：body 不是合法 JSON（`request.json()` 抛 `SyntaxError`，
   空 body 就够了）、以及 schema 不匹配（裸 `ZodError` 逃出去）。
@@ -538,12 +532,12 @@ if (!result.ok) {
   if (result.fields?.length) {
     for (const field of result.fields) {
       if (field === 'title' || field === 'body') {
-        setError(field, { message: t(`${field}Invalid`) })
+        setError(field, { message: FIELD_MESSAGE[field] })
       }
     }
     return
   }
-  toast.danger(errorMessage(result))
+  toast.danger(getActionErrorMessage(result))
   return
 }
 ```
@@ -552,38 +546,36 @@ if (!result.ok) {
 
 - **服务端的 `VALIDATION` 是纵深防御，不是日常路径。** 同一份 schema 已经在客户端由
   `zodResolver` 跑过了，所以走到这里意味着请求被改过或者 schema 漂移了。
-- **字段文案是 `t('titleInvalid')`，不是 `errors.title?.message`。** 后者是 zod 自带的英文串。
-  按"哪个字段错了"取文案，和 `LoginForm` 一致。
+- **字段文案是查一个 `FIELD_MESSAGE` 字面量表，不是 `errors.title?.message`。** 后者是
+  zod 自带的英文串。按"哪个字段错了"取文案，和 `LoginForm` 一致。
 
 ### 三个错误边界
 
 | 文件 | 接住什么 | 渲染在哪 |
 | --- | --- | --- |
-| `app/[locale]/(app)/error.tsx` | (app) 组里页面抛的错 | `AppShell` **里面**——rail 还在，用户能导航走 |
-| `app/[locale]/error.tsx` | (app) 之外的页面，**以及 `(app)/layout.tsx` 自己抛的错** | 整个 `<body>` 内 |
-| `app/global-error.tsx` | `[locale]/layout.tsx` 自己抛的错 | 它自己的 `<html>` / `<body>` |
+| `app/(app)/error.tsx` | (app) 组里页面抛的错 | `AppShell` **里面**——rail 还在，用户能导航走 |
+| `app/error.tsx` | (app) 之外的页面，**以及 `(app)/layout.tsx` 自己抛的错** | 整个 `<body>` 内 |
+| `app/global-error.tsx` | `app/layout.tsx` 自己抛的错 | 它自己的 `<html>` / `<body>` |
 
 规则来自 Next：**`error.tsx` 不包住自己那一段的 layout**，所以每往上一层就少一层可用的东西。
 
 - **签名是 `{ error, retry }`。** Next 16 改的名，`retry` 从 16.3 起稳定。`retry()` 会重新
   取数据并重渲染边界的 children；老的 `reset()` 只清错误状态，不重新取。
-- **`[locale]/error.tsx` 和 `(app)/error.tsx` 里 `useTranslations` 是可用的**——它们都在
-  `[locale]/layout.tsx` 的 `NextIntlClientProvider` 之内。可见部分共用
-  [ErrorState](src/components/ui/ErrorState.tsx)，两个文件的差别只是它渲染在哪。
+- **`app/error.tsx` 和 `(app)/error.tsx` 传的是硬编码中文字面量**，不是从某个 provider 读的
+  文案——两者共用 [ErrorState](src/components/ui/ErrorState.tsx)，两个文件的差别只是它渲染在哪。
 - **`global-error.tsx` 什么都 import 不了，这是刻意的。** 它替换掉根布局，所以：得自己渲染
   `<html>`/`<body>`；不能 `export metadata`（错误边界是 Client Component，用 React 的
   `<title>` 代替）；**拿不到全局样式**，因为 `<ColorSchemeScript>` 和它写的
   `data-mantine-color-scheme` 都属于刚刚炸掉的那个 layout。更重要的是，这是应用坏掉时唯一还要工作的页面——每一个
   import 都是它跟着一起坏掉的途径，所以它用内联 `<style>` 和硬编码文案，一个 import 都没有。
-  文案是中英双语硬编码的：翻译在 `NextIntlClientProvider` 后面，而那个 provider 已经没了。
 - **`digest` 值得露出来。** 生产环境下真实消息只在服务端日志里，客户端只有这个 hash——它是
   用户能拿来报障的唯一线索。
 
 ### `loading.tsx` 带来的一条无害日志
 
-`app/[locale]/(app)/loading.tsx` 给这一组加了 Suspense 边界，于是这些页面变成**流式响应**。
-代价是：客户端在响应还没发完时就离开（语言切换是 `window.location.assign()` 的硬跳转，
-最容易触发），服务端会打一条
+`app/(app)/loading.tsx` 给这一组加了 Suspense 边界，于是这些页面变成**流式响应**。
+代价是：客户端在响应还没发完时就离开（任何硬导航——关标签页、手动改地址栏——都能触发），
+服务端会打一条
 
 ```
 ⨯ Error: The destination stream closed early.
@@ -621,12 +613,10 @@ per-request 包装器的位置，而实际会打日志的地方只有 `runAction
 `headers()` 也会抛 Next 自己的"你在静态渲染里用了动态 API"信号，把**那个**吞掉会让一个
 构建期诊断变成静默渲染错的页面。
 
-> proxy 里的写法有个关键点：**在调 next-intl 之前改 `request.headers`**。next-intl 内部用
-> `new Headers(request.headers)` 建转发头再交给 `NextResponse.next({ request: { headers } })`
-> （见 `node_modules/next-intl/dist/esm/development/middleware/middleware.js`），所以那时候
-> 设的东西会被带下去。反过来先让 next-intl 出响应、再往响应上加**请求**头是做不到的，除非
-> 动 Next 内部的 `x-middleware-override-headers` 协议。这条链路有 e2e 守着
-> （`e2e/observability.e2e.ts`）。
+> proxy 里的写法有个关键点：**先改 `request.headers`，再用它构造 `NextResponse.next({
+> request: { headers: request.headers } })`**。这是 Next 官方支持的、往下游渲染层加**请求**
+> 头的唯一方式；反过来，先造好 response 再往它身上加请求头是做不到的，除非动 Next 内部的
+> `x-middleware-override-headers` 协议。这条链路有 e2e 守着（`e2e/observability.e2e.ts`）。
 
 ### 日志脱敏，以及它保证不了什么
 
@@ -735,7 +725,7 @@ unsafe-inline"——在同一个 directive 里只能二选一。
 Next 会自动把 nonce 打到它**自己**生成的东西上（框架脚本、页面 chunk、它自己的内联样式）。
 它不认识的就得自己接：
 
-- **Mantine 的 `<ColorSchemeScript>`。** `app/[locale]/layout.tsx` 读 `x-nonce` 直接传给它的
+- **Mantine 的 `<ColorSchemeScript>`。** `app/layout.tsx` 读 `x-nonce` 直接传给它的
   `nonce` prop（同一个值也给 `MantineProvider` 的 `getStyleNonce`）。接错了的症状恰恰是这个脚本
   被放进来要解决的那个问题：首屏闪一帧错误的配色。`e2e/security.e2e.ts` 有一条用例断言
   `<html>` 上的 `data-mantine-color-scheme` 是 `light|dark`，就是守这个。
@@ -813,7 +803,7 @@ Server Action 不在此列——它自带 origin 校验。
 三者在 [AppProviders.tsx](src/components/providers/AppProviders.tsx) 里接成
 `<MantineProvider theme={theme} cssVariablesResolver={cssVariablesResolver}>`；
 `mantine-overrides.css` 是普通 CSS 文件，和 Mantine 自己的两份 `styles.css` 一起在
-[layout.tsx](src/app/[locale]/layout.tsx) 里按顺序 import——**顺序是硬约束**（晚导入的覆盖
+[layout.tsx](src/app/layout.tsx) 里按顺序 import——**顺序是硬约束**（晚导入的覆盖
 早导入的），细节看那个文件顶部的注释。
 
 **没有 utility class 层，也没有 Tailwind。** 组件排版用 Mantine 的 style props
@@ -860,7 +850,7 @@ Server Action 不在此列——它自带 origin 校验。
 
 `data-mantine-color-scheme="light"|"dark"`（属性，不是 class），由 Mantine 的
 `<ColorSchemeScript defaultColorScheme="auto">` 在首屏 paint 前写好——这一行在
-[layout.tsx](src/app/[locale]/layout.tsx) 的 `<head>` 里，`nonce` 要手动接，见
+[layout.tsx](src/app/layout.tsx) 的 `<head>` 里，`nonce` 要手动接，见
 [两个必须手工接线的 nonce 消费者](#两个必须手工接线的-nonce-消费者)。
 
 - `<html {...mantineHtmlProps}>` 静态写了 `data-mantine-color-scheme="light"` 和
@@ -885,10 +875,11 @@ const form = useForm({ validate: resolvePhoneOtp, ... })
 `schemaResolver()` 直接吃 Zod schema（Standard Schema）。`{ sync: true }` 让
 `form.validate()` 同步返回结果而不是 Promise——这点在"发送验证码"那一步很关键：按钮要在同一
 个事件循环里决定是否开始倒计时。字段报错信息不能来自 schema 本身（`core/auth/schema.ts`
-故意不带任何本地化文案，zod 产出的是不可翻译的英文串），所以按字段名查一个消息 key 的映射，
-而不是拼 `t(\`${field}Invalid\`)`——后者绕开了 next-intl 生成的 key 类型检查。
+故意不带任何本地化文案，zod 产出的是不可翻译的英文串），所以按字段名查一个 `FIELD_MESSAGE`
+字面量表，而不是拼字符串——`Record<keyof PhoneOtp, string>` 的类型标注保证了每个字段都有
+对应文案，漏一个 `bun run typecheck` 就会报错。
 
-### 侧边栏 rail 的一个坑,语言菜单的另一个
+### 侧边栏 rail 的一个坑
 
 [AppShell.tsx](src/components/layout/AppShell.tsx)：
 
@@ -900,15 +891,6 @@ const form = useForm({ validate: resolvePhoneOtp, ... })
   容器，所以每个导航项只有一个 tab 停靠点，键盘聚焦也会触发 tooltip。旧版本（另一套 UI 库）的
   `Tooltip` 会多套一层 `role="button"`，`e2e/a11y.e2e.ts` 顶部的注释记着这件事——现在没有任何
   规则被禁用，保持这样。
-
-[locale-switch.tsx](src/components/ui/locale-switch.tsx) 的语言菜单有个不直观的嵌套顺序：
-**`Tooltip` 必须包在 `Menu.Target` 外面，不能反过来。** `Tooltip` 会把自己不认识的 props
-原样转发给子元素，但转发目标是它内部的浮层标签，不是子元素本身；反过来嵌套
-（`Menu.Target` 包 `Tooltip`）会让 `aria-expanded` / `aria-haspopup` / `aria-controls`
-全部落在 tooltip 身上，触发按钮上什么都没有。另外 `Menu` 要显式关掉
-`withInitialFocusPlaceholder`——默认它会在下拉里塞一个 `role="presentation"` 的占位 div
-抢首个 focus，而 `role="menu"` 只能包 menu 相关的角色，axe 会报 critical 级的
-`aria-required-children`。
 
 ## 认证
 
@@ -939,8 +921,8 @@ provider + JWT session。手机号+验证码登录本身就是注册——第一
 
 ### 路由守卫在哪，管到哪
 
-**唯一的守卫在 [(app)/layout.tsx](src/app/%5Blocale%5D/%28app%29/layout.tsx)**：`await auth()`，
-没 session 就 `redirect({ href: '/login', locale })`。
+**唯一的守卫在 [(app)/layout.tsx](src/app/(app)/layout.tsx)**：`await auth()`，
+没 session 就 `redirect('/login')`。
 
 - **`src/proxy.ts` 故意不管登录态**：把 `auth()` 拉进 proxy 会把数据库驱动和 Auth.js adapter
   一起拖进那个 bundle。
@@ -1029,91 +1011,16 @@ requireSession(session)      → UnauthorizedError ← 共用的那一半
 **`/api/v1` 从第一天就带版本前缀。** 小程序是灰度发布的,老版本会继续调老形状一段时间,
 所以你需要一个能放 v2 而不破坏它们的地方。现在只花一个路径段,事后再加很痛。
 
-## 国际化
-
-中英双语，`zh` 是默认语言也是文案的**源语言**（`en.json` 是它的翻译）。
-
-```
-src/i18n/
-├── routing.ts          # locales / defaultLocale / localePrefix
-├── request.ts          # 按 locale 加载 messages，校验非法 locale
-├── navigation.ts       # locale 感知的 Link / redirect / usePathname / useRouter
-└── messages/
-    ├── zh.json         # 源语言
-    ├── zh.d.json.ts    # 自动生成，进版本库，别手改
-    └── en.json
-```
-
-**URL 策略是 `as-needed`**：默认语言不带前缀，其他语言带。
-
-| 页面 | 中文 | 英文 |
-| --- | --- | --- |
-| 概览 | `/dashboard` | `/en/dashboard` |
-| 笔记 | `/notes` | `/en/notes` |
-
-`/zh/dashboard` 会 307 重定向到 `/dashboard`。`localeDetection` 是开启的，所以英文浏览器
-首次访问 `/` 会被送去 `/en`——不想要这个行为就在 `routing.ts` 里设 `localeDetection: false`。
-SEO 的 `alternateLinks` 响应头由 next-intl 默认开启，不用手写 `alternates.languages`。
-
-几条规矩：
-
-- **`Link` / `usePathname` / `useRouter` / `redirect` 一律从 `@/i18n/navigation` 导入**，
-  不要从 `next/link` 或 `next/navigation` 拿——那两个不认语言前缀。例外是 `useLinkStatus`，
-  它没有 locale 概念，继续从 `next/link` 导入（`AppShell.tsx` 就是这么混用的）。
-  next-intl 的 `usePathname()` 返回的是**不带前缀**的路径，所以拿它和 `/dashboard` 这种
-  常量比较是对的。
-- **Server Component 用 `getTranslations()`，Client Component 用 `useTranslations()`。**
-  前者要 await。
-- **文案里的 `<code>` 之类标签用 `t.rich()`**，不要拼 HTML 字符串，
-  见 `[locale]/(app)/dashboard/page.tsx` 的 `description`。
-- **数字参数写成 `{value, number}`** 而不是 `{value}`：后者的类型会被推成 `string`，
-  传 number 进去过不了 typecheck，而且也拿不到本地化的数字格式。
-- **`t()` 的 key 是类型安全的。** `next.config.ts` 里的 `createMessagesDeclaration` 会由
-  `zh.json` 生成 `zh.d.json.ts`，`src/types/messages.d.ts` 把它接到 `AppConfig.Messages` 上，
-  写错 key 会在 `bun run typecheck` 挂掉。生成的文件**必须提交**——它只在 `next dev` / `next build`
-  时写出来，CI 的 typecheck 不触发生成，忽略掉就会让 CI 挂。
-
-加一条文案：改 `zh.json` → 同步 `en.json` → 跑一次 `bun run build`（或 `dev`）让声明文件更新
-→ 在组件里 `t('...')`。
-
-### 语言切换为什么是整页刷新
-
-[locale-switch.tsx](src/components/ui/locale-switch.tsx) 用 `window.location.assign()` 而不是
-next-intl 的 `router.replace()`，有两个原因，改回软导航就会各自复现：
-
-1. **切换语言是全应用唯一跨 `[locale]` 段的导航。** 软导航会让 `app/[locale]/layout.tsx` 在客户端
-   重新渲染，而它持有 `<html>` 和 `<head>`——里面有 Mantine 的 `<ColorSchemeScript>`。React 不会
-   执行自己在客户端创建的 `<script>`，只在控制台打一条
-   *"Encountered a script tag while rendering React component"*（仅开发构建，但脚本确实被跳过了），
-   于是明暗主题会一直停在 `mantineHtmlProps` 静态写的那个值上，直到下一次硬加载。
-2. **必须带 `forcePrefix`。** `localePrefix` 是 `as-needed`，所以裸的 `/settings` 是有歧义的，proxy
-   会拿 `NEXT_LOCALE` cookie 去判断——而那时 cookie 还是**旧** locale，于是又被弹回去。导航到显式的
-   `/zh/settings` 能让 proxy 改写 cookie 并自己把 URL 规范化成 `/settings`。next-intl 的 router 是靠
-   导航前先写 cookie 做到这件事的；交给 proxy 可以不重复一个在 `routing.ts` 里可配置的 cookie 名。
-
-代价是切换后要重新 hydrate，那一小段时间里 rail 是不可交互的——`e2e/i18n.e2e.ts` 里对应的那次点击
-因此包了一层 `toPass()` 重试。
-
-普通页面跳转不受影响：`Link` 默认沿用当前 locale，不跨段，仍然是软导航。
-
-### SEO 与元数据
+## SEO 与元数据
 
 绝对 URL 全部从 `APP_URL` 派生，收在 [src/core/site-url.ts](src/core/site-url.ts)，
 这样 metadata、sitemap、robots.txt 不会对"这个站叫什么"产生分歧。
 
-**这一块的每种错法都是静默的**：缺 `metadataBase` 不会报错，只会把 localhost 发布出去；
-locale 前缀算错不会报错，只会发布一堆会 307 的 URL。所以
-[e2e/seo.e2e.ts](e2e/seo.e2e.ts) 和 [core/site-url.test.ts](src/core/site-url.test.ts)
+**这一块的每种错法都是静默的**：缺 `metadataBase` 不会报错，只会把 localhost 发布出去。
+所以 [e2e/seo.e2e.ts](e2e/seo.e2e.ts) 和 [core/site-url.test.ts](src/core/site-url.test.ts)
 把这些都钉住了。
 
-- **`localePrefix` 是 `as-needed`，所以默认语言没有前缀。** `localePath()` 封装了这条规则。
-  写错就会发布 `/zh/notes` 这种会重定向到 `/notes` 的规范链接。
-- **hreflang 必须互相声明。** 每个语言版本都要列出全部语言 + `x-default`，少一边搜索引擎
-  会把整组忽略掉。`localeAlternates()` 保证这点，e2e 在两个 locale 上都断言了。
-- **`robots.ts` / `sitemap.ts` 在 `[locale]` 外面。** 这两个是**按 origin** 的，放进 locale
-  段就会被发布到 `/en/robots.txt`，没有爬虫会去那里找。
-
-#### 两个实际踩到的坑
+### 两个实际踩到的坑
 
 **`robots.txt` / `sitemap.xml` 默认是静态生成的，会把构建时的 `APP_URL` 烤死。**
 实测发现的：`APP_URL=https://example.test bun run start` 之后页面的 canonical 是对的
@@ -1124,16 +1031,9 @@ locale 前缀算错不会报错，只会发布一堆会 307 的 URL。所以
 
 **sitemap 现在是空的，这是对的。** 本模板没有任何可被爬取的公开页面：`/` 是 307 跳到
 `/dashboard`（见 `(app)/page.tsx`），整个 `(app)` 组要登录，`/login` 和 `/403` 在
-robots.txt 里被 disallow。一开始我在 `PUBLIC_PATHS` 里放了 `/`，
+robots.txt 里被 disallow。一开始 `PUBLIC_PATHS` 里放了 `/`，
 e2e 的"每个列出的 URL 都不能重定向"当场把它抓出来了。所以交付的是**接好线并测过的机制**，
 里面暂时没有内容——有公开页面之后往 `PUBLIC_PATHS` 加。
-
-#### manifest 不能本地化
-
-manifest 是按 origin 的，一个 origin 一份，没法按语言给不同的。所以它用默认语言的文案
-构建（`getTranslations` 显式传 locale，不读请求）。也没有 `icons`——本模板只有
-`favicon.ico`，而列出不存在的图标尺寸会让安装**失败**而不是降级。补了真的
-192×192 / 512×512 PNG 之后再往里写。
 
 ## 编码规范
 
@@ -1161,7 +1061,7 @@ import 顺序也是 Biome 自动排的，分组顺序：`bun:`/`node:` → 第�
 跟着现有文件走，不要另起一套：
 
 - 组件文件 PascalCase：`AppShell.tsx`、`LoginHero.tsx`、`LoginForm.tsx`
-- hooks / 工具 / 非组件模块 kebab-case：`color-mode.tsx`、`locale-switch.tsx`、`notes-service.ts`
+- hooks / 工具 / 非组件模块 kebab-case：`color-mode.tsx`、`notes-service.ts`
 - 数据库表变量带 `Table` 后缀：`usersTable`、`notesTable`
 
 ### TypeScript
@@ -1169,12 +1069,13 @@ import 顺序也是 Biome 自动排的，分组顺序：`bun:`/`node:` → 第�
 - `strict: true`，不要 `any`。
 - 类型尽量**推导而不是手写**：入参类型从 Zod schema 推、表行类型用 `$inferSelect`
   （`import type { Note } from '@/core/db/schema'`），service 的返回值让它自己推。
-- **Zod 的 `.default()` 会让 input / output 类型不一样**，react-hook-form 要写三个泛型参数：
-  `useForm<CreateNoteValues, unknown, CreateNoteInput>`。`src/features/notes/schema.ts` 把两个
-  类型都导出了就是为这件事。
-- 页面/布局的 props 用 Next 生成的 `PageProps<'/路径'>` / `LayoutProps<'/路径'>`，注意路径要带
-  locale 段，例如 `LayoutProps<'/[locale]'>`。改了路由结构记得重跑 `bun run typecheck`
-  （它会先 `next typegen`）。
+- **Zod 的 `.default()` 会让 input / output 类型不一样**——`z.input<typeof schema>` 是表单持有
+  的那份（`body` 可以不填），`z.output<typeof schema>` 是解析后 service 收到的那份（`body`
+  一定有值）。`useForm<CreateNoteValues>`（Mantine `@mantine/form`）用前者；
+  `src/features/notes/schema.ts` 把两个类型都导出了就是为这件事。
+- 页面/布局的 props 用 Next 生成的 `PageProps<'/路径'>` / `LayoutProps<'/路径'>`，路径要跟
+  实际的路由结构完全一致，例如根布局是 `LayoutProps<'/'>`。改了路由结构记得重跑
+  `bun run typecheck`（它会先 `next typegen`）。
 
 ### Server / Client 组件
 
@@ -1231,8 +1132,9 @@ import 顺序也是 Biome 自动排的，分组顺序：`bun:`/`node:` → 第�
 保证不了它在注册之后。
 
 [LoginForm.test.tsx](src/features/auth/components/LoginForm.test.tsx) 是范例：用
-`mock.module()` 换掉 `next-auth/react` 和 `@/i18n/navigation`，但**文案用真的 `zh.json`
-配 `NextIntlClientProvider`**——这样改错 message key 会让测试挂，而不是静默渲染出 key 名。
+`mock.module()` 换掉 `next-auth/react` 和 `next/navigation`。断言直接查真实渲染出来的
+中文字面量（`'手机号'`、`'登录'`……）——组件里的文案就是硬编码的，测试没有另一份来源要保持
+同步。
 
 ### 单测（`src/core/`）
 
@@ -1362,15 +1264,12 @@ fetcher，在 fetcher 里把 `ActionResult` 拆开（失败就 `throw`，这样 
 [分层与依赖方向](#分层与依赖方向)的暴露方式优先级。要过网络就加一个 `dto.ts`，见
 [DTO 为什么必需](#dto-为什么必需)。
 
-> `revalidatePath()` 要传**路由模式**而不是具体 URL：页面在 `[locale]` 下，所以是
-> `revalidatePath('/[locale]/tasks', 'page')`。写成 `'/tasks'` 不会命中任何路由。
-
 ### 6. 加页面
 
-`src/app/[locale]/(app)/tasks/page.tsx`（要 rail 和登录拦截就放 `(app)` 组，公开的全屏页放
+`src/app/(app)/tasks/page.tsx`（要 rail 和登录拦截就放 `(app)` 组，公开的全屏页放
 `(auth)` 组或自己新建一组）。拷 `settings/page.tsx` 当起点最省事，要带表单和列表就拷 `notes/`。
 需要在 rail 上露出入口，就去 `src/components/layout/NavLinks.ts` 加一条
-`{ href, labelKey, icon }`，并在 `zh.json` / `en.json` 的 `Nav` namespace 里补上对应 key。
+`{ href, label, icon }`——`label` 直接写中文字面量，不用另外查文案文件。
 
 ### 7. 加 E2E
 
@@ -1379,9 +1278,7 @@ fetcher，在 fetcher 里把 `ActionResult` 拆开（失败就 `throw`，这样 
 ### 几个更短的路径
 
 - **只加一个静态页面**：第 6 步 + 第 7 步就够了。
-- **只加/改文案**：改 `zh.json` + `en.json`，跑一次 build 让声明文件更新。
-- **加一门语言**：`src/i18n/routing.ts` 的 `locales` 加一项、加 `messages/<locale>.json`、
-  在 `src/types/messages.d.ts` 的 `Locale` 联合类型里加上、`Locale` namespace 里补语言名。
+- **只加/改文案**：直接改组件里的中文字面量，不用同步任何其他文件。
 - **加一种登录方式**：只改 `src/core/auth/config.ts` 的 `providers`。
 - **加环境变量**：必须同时改三处——`.env.example`、`src/core/env.ts` 的 `server` 和 `runtimeEnv`
   （两个都要写，漏一个读到 undefined）、必要时 `.github/workflows/ci.yml` 的 `env`。
@@ -1500,21 +1397,6 @@ merge / revert / fixup 消息直接放过。
   `@mantine/*` 声明成精确版本的 peer dependency，单独升一个直接装不上；
   `postcss-preset-mantine` 编译的是组件样式依赖的 CSS 特性，跟着一起升。
 - patch / minor 批量成一个 PR：三十个独立的版本号 PR 是"依赖 PR 开始被无视"的起点。
-
-### 为什么没有做 i18n 文案裁剪
-
-评估过，**测量之后决定不做**。`NextIntlClientProvider` 目前把整个 locale 的文案交给客户端，
-听起来该裁，但：
-
-- `zh.json` 总共 **4120 字节**。
-- 客户端组件用到 **11 个 namespace 里的 9 个**，全局裁剪最多省下 `Meta` 那 1.3%。
-- 占比最大的是 `Dashboard`（34%，1399 字节），而它只有 dashboard 页用——但那一页
-  README 就是让你删的。
-
-也就是说最理想的按路由裁剪能省 ~1.4 KB，代价是引入一个"忘了给某个 namespace 授权就静默
-渲染出 key 名"的机制。**不划算。** 什么时候重新考虑：文案总量涨到几十 KB，或者出现一个又大
-又只属于某条路由的 namespace——那时的做法是在那个页面里再套一层
-`NextIntlClientProvider` 只给它自己的 namespace，而不是在根布局搞白名单。
 
 ## 部署
 
@@ -1639,22 +1521,19 @@ CI（`.github/workflows/ci.yml`）四个并行 job：`lint` / `typecheck` / `tes
 
    ```bash
    # 1. 目录名不能以下划线开头——那是 Next 的 private folder 约定，整个目录不进路由
-   mkdir -p 'src/app/[locale]/boomprobe' 'src/app/[locale]/(app)/boomprobeapp'
-   for d in 'src/app/[locale]/boomprobe' 'src/app/[locale]/(app)/boomprobeapp'; do
+   mkdir -p 'src/app/boomprobe' 'src/app/(app)/boomprobeapp'
+   for d in 'src/app/boomprobe' 'src/app/(app)/boomprobeapp'; do
    echo 'export default async function Boom() { throw new Error("probe") }' > "$d/page.tsx"
    done
-   # 2. 用 /en/ 前缀访问。顶层就是 [locale] 动态段，所以 /boomprobe 会被当成
-   #    locale="boomprobe"，被 layout 的 hasLocale() 判成 404；localePrefix 是
-   #    'as-needed'，只有非默认语言会保留前缀。
-   bun run dev   # 然后开 /en/boomprobe 和 /en/boomprobeapp
-   # 3. 验完删掉这两个目录
+   bun run dev   # 然后开 /boomprobe 和 /boomprobeapp
+   # 2. 验完删掉这两个目录
    ```
 
    要确认的四件事：错误 UI 出来了；`(app)` 那条**左侧 rail 还在**（嵌套边界的意义就在这）；
    生产构建（`bun run build && bun run start`）下**真实的错误消息不出现在页面上**，只有
    `digest`；点"重试"能重新渲染。
 
-   `global-error.tsx` 要触发得让 `[locale]/layout.tsx` 自己抛错，代价比较大，一般改完它
+   `global-error.tsx` 要触发得让 `app/layout.tsx` 自己抛错，代价比较大，一般改完它
    肉眼过一遍就行。
 6. **`src/core/storage/local-stub.ts` 只是占位**，写本地磁盘。真要用文件存储就照 `StorageAdapter`
    接口换成 S3/R2 实现。

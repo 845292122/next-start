@@ -13,10 +13,9 @@ export default defineConfig({
 	reporter: 'list',
 	use: {
 		baseURL: 'http://localhost:3000',
-		// Pinned because next-intl's localeDetection is on: Chrome's default
-		// Accept-Language is en-US, which would redirect '/' to '/en/dashboard' and
-		// break every unprefixed assertion. Tests that want English navigate to an
-		// /en URL explicitly.
+		// The app is Chinese-only; pinning the browser's locale keeps the test
+		// environment's Accept-Language from introducing incidental differences
+		// (Chrome's default is en-US).
 		locale: 'zh-CN',
 	},
 	webServer: {

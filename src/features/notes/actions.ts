@@ -37,16 +37,12 @@ import {
  */
 
 /**
- * Routes live under app/[locale]/, so `revalidatePath` needs the route pattern
- * plus the 'page' type rather than a concrete URL — the literal '/notes' matches
- * no route and would invalidate nothing.
- *
  * Only the mutations call this. It exists for the server-rendered first paint in
  * `notes/page.tsx`; the client's own copy of the list is SWR's, and that gets
  * invalidated separately (see `notesKeyFilter` in swr-keys.ts).
  */
 function revalidateNotesPage() {
-	revalidatePath('/[locale]/notes', 'page')
+	revalidatePath('/notes', 'page')
 }
 
 export async function createNoteAction(

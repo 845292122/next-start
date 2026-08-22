@@ -14,7 +14,7 @@ test.describe('request id', () => {
 	test('a page response carries one', async ({ request }) => {
 		// Minted by the proxy. This is the id the render sees through headers(), so
 		// it's also what shows up on `runAction`'s log lines.
-		const response = await request.get('/en/login')
+		const response = await request.get('/login')
 
 		expect(response.status()).toBe(200)
 		expect(response.headers()[REQUEST_ID]).toMatch(
@@ -27,7 +27,7 @@ test.describe('request id', () => {
 	}) => {
 		// What makes our logs join up with a load balancer's or CDN's. Replacing it
 		// would break the trace at our front door.
-		const response = await request.get('/en/login', {
+		const response = await request.get('/login', {
 			headers: { [REQUEST_ID]: 'from-load-balancer-123' },
 		})
 

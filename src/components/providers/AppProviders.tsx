@@ -12,10 +12,9 @@ import { theme } from '@/components/providers/theme'
  *
  * Shorter than it looks like it should be, because Mantine concentrates what
  * other kits spread out: `MantineProvider` carries the theme, the colour scheme
- * and the CSS variables, and there is no router or locale provider to wire —
- * Mantine components take `component={Link}` per call site rather than resolving
- * navigation through context, and its only locale-sensitive concern (text
- * direction) is LTR for both of this app's locales.
+ * and the CSS variables, and there is no router provider to wire — Mantine
+ * components take `component={Link}` per call site rather than resolving
+ * navigation through context.
  */
 export function AppProviders({
 	children,
@@ -25,7 +24,7 @@ export function AppProviders({
 	children: React.ReactNode
 	session: Session | null
 	/**
-	 * The CSP nonce, read from the request by `app/[locale]/layout.tsx`.
+	 * The CSP nonce, read from the request by `app/layout.tsx`.
 	 *
 	 * Used for the `<style>` element `MantineProvider` generates to hold the
 	 * theme's CSS variables. Everything Next itself emits gets a nonce
@@ -38,7 +37,7 @@ export function AppProviders({
 			{/*
 			 * defaultColorScheme="auto" — follow the OS until the user picks
 			 * otherwise. It has to match the value given to `<ColorSchemeScript>` in
-			 * app/[locale]/layout.tsx: the script decides what the page paints with
+			 * app/layout.tsx: the script decides what the page paints with
 			 * *before* React runs, so a mismatch is a flash of the wrong scheme
 			 * followed by a correction.
 			 */}

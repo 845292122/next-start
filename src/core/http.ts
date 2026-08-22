@@ -36,8 +36,8 @@ const STATUS_BY_CODE: Record<AppErrorCode, number> = {
  * The context parameter is passed straight through. For a dynamic route, name it
  * with Next's generated `RouteContext<'/the/route'>` global so `params` stays
  * typed from the route path itself rather than a hand-written duplicate that can
- * drift — the same generated-types trick as `LayoutProps<'/[locale]'>` in
- * `app/[locale]/layout.tsx`:
+ * drift — the same generated-types trick as `LayoutProps<'/'>` in
+ * `app/layout.tsx`:
  *
  * ```ts
  * export const GET = withHandler(async (request) => { ... })

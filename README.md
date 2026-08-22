@@ -1,12 +1,12 @@
 # next-start
 
-一个全栈 Next.js 项目模板：App Router + Mantine + Drizzle/SQLite + Auth.js + next-intl，包管理和运行时用 Bun。
+一个全栈 Next.js 项目模板：App Router + Mantine + Drizzle/SQLite + Auth.js，包管理和运行时用 Bun。
 
-开箱即用的部分：中英双语路由、明暗主题、手机号+验证码登录（带路由守卫）、一条完整的
+开箱即用的部分：明暗主题、手机号+验证码登录（带路由守卫）、一条完整的
 「建表 → service → Server Action → 界面」示例（`/notes`，含分页、事务和 LIKE 转义），一套 Server Action 和 Route Handler
 共用的错误契约（含错误边界），请求 id 贯穿的结构化日志（带脱敏）+ `/api/health`，
 一套实测过不误伤应用的安全响应头（nonce CSP / HSTS / …）和登录限流，
-canonical / hreflang / robots / sitemap，一个单实例的生产 `Dockerfile`，
+canonical / robots / sitemap，一个单实例的生产 `Dockerfile`，
 以及 lint / typecheck / 单测（带覆盖率阈值）/ 组件测试 / E2E（含 axe 无障碍扫描）五条流水线
 ＋ Git 钩子和 Renovate 分组策略。
 
@@ -44,7 +44,6 @@ bun run dev
 | 图标 | `@tabler/icons-react`（Mantine 官方文档和大部分官方模板用的那套） |
 | 数据库 / ORM | SQLite（`@libsql/client`）+ Drizzle 0.45 |
 | 认证 | Auth.js（next-auth 5 beta）+ `@auth/drizzle-adapter`；cookie 与 Bearer 两种传输共用一个验证核心 |
-| 国际化 | next-intl 4（中英双语） |
 | 表单 / 校验 | `@mantine/form` + Zod 4（Standard Schema） |
 | 客户端数据 | SWR 2 |
 | 代码质量 | Biome 2 |
@@ -69,9 +68,9 @@ bun run dev
 
 ## 拿它开新项目
 
-1. 改 `package.json` 的 `name`、`src/i18n/messages/*.json` 里的 `Meta`。
+1. 改 `package.json` 的 `name`、`src/app/layout.tsx` 和 `src/app/manifest.ts` 里硬编码的标题/简介。
 2. 不需要示例业务就删掉 `src/features/notes/`、`src/core/services/notes-service*.ts`、
-   `src/app/api/notes/`、`src/app/api/v1/notes/`、`src/app/[locale]/(app)/notes/`，以及
+   `src/app/api/notes/`、`src/app/api/v1/notes/`、`src/app/(app)/notes/`，以及
    `NavLinks.ts` 里那一条、`e2e/notes.e2e.ts` 和 `e2e/api-errors.e2e.ts`。
    不做微信小程序的话再删 `src/core/auth/wechat.ts`（含测试）、`src/app/api/v1/`、
    `src/features/auth/schema.ts` 和 `e2e/api-v1.e2e.ts`；`core/auth/verify.ts` 留着，
@@ -81,5 +80,5 @@ bun run dev
    > `src/instrumentation.ts`、`src/app/api/health/`，以及它们的 `*.test.ts` 和
    > `e2e/observability.e2e.ts` / `e2e/security.e2e.ts` **都不要删**——那是错误契约、
    > 可观测性和安全的地基，不属于示例业务。
-3. `src/app/[locale]/(app)/dashboard/page.tsx` 是主题展示页，真业务落地后整页删掉。
+3. `src/app/(app)/dashboard/page.tsx` 是主题展示页，真业务落地后整页删掉。
 4. 加自己的业务：照 [DEVELOPMENT.md 的标准流程](DEVELOPMENT.md#新增业务的标准流程)走。

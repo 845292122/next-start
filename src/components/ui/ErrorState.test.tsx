@@ -3,31 +3,32 @@ import { MantineProvider } from '@mantine/core'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ErrorState } from '@/components/ui/ErrorState'
-import messages from '@/i18n/messages/zh.json'
 
 /**
  * Component test for the shared body of the error boundaries.
  *
- * The boundaries themselves (`app/[locale]/error.tsx`,
- * `app/[locale]/(app)/error.tsx`, `app/global-error.tsx`) aren't covered here —
- * triggering them needs a route that deliberately throws, and the template
- * doesn't ship one. This covers everything they *render*, which is the part that
- * breaks silently.
+ * The boundaries themselves (`app/error.tsx`, `app/(app)/error.tsx`,
+ * `app/global-error.tsx`) aren't covered here — triggering them needs a route
+ * that deliberately throws, and the template doesn't ship one. This covers
+ * everything they *render*, which is the part that breaks silently.
  *
- * No `mock.module` and no `NextIntlClientProvider`, both on purpose: `ErrorState`
- * takes finished strings and the home link as a slot, so it imports nothing that
- * needs a request context. That's what lets this file be a plain render — and it
- * avoids mocking `@/i18n/navigation`, which would clobber `LoginForm.test.tsx`'s
- * mock of the same module (bun's `mock.module` is process-wide and `test:dom`
- * runs every file in one process).
+ * No `mock.module`, on purpose: `ErrorState` takes finished strings and the home
+ * link as a slot, so it imports nothing that needs a request context. That's
+ * what lets this file be a plain render.
  *
  * `MantineProvider` is the one wrapper that *is* required: Mantine components read
  * the theme from it and throw without one. `env="test"` disables transitions.
  */
 
-// Real messages, so a renamed key fails the test instead of rendering the key
-// name — same reasoning as LoginForm.test.tsx.
-const t = messages.Errors
+// The same literal Chinese the real error boundaries pass in — see
+// `app/error.tsx` / `app/(app)/error.tsx`.
+const t = {
+	title: '这个页面没能加载出来',
+	description:
+		'渲染时出了点问题。重试一次通常就好了；如果一直这样，把下面的错误编号发给我们。',
+	retry: '重试',
+	backHome: '回到首页',
+}
 
 function renderState(props: Partial<Parameters<typeof ErrorState>[0]> = {}) {
 	return render(

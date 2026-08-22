@@ -1,8 +1,8 @@
 /**
  * Decorative left panel for the sign-in screen: a halftone dot texture, a brand
  * mark, a couple of floating card mockups, and a headline. Nothing else depends on
- * it besides app/[locale]/(auth)/login/page.tsx — swap the whole thing out when
- * there's real brand art.
+ * it besides app/(auth)/login/page.tsx — swap the whole thing out when there's
+ * real brand art.
  *
  * The dot texture is a self-contained SVG (a tiled `<pattern>` behind a
  * radial-gradient `<mask>` that fades the density toward one corner) rather than an
@@ -17,24 +17,19 @@
 import { Badge, Box, Group, Paper, Text } from '@mantine/core'
 import {
 	IconDatabase,
-	IconLanguage,
 	IconPalette,
 	IconRocket,
 	IconShieldCheck,
 	IconSparkle,
 } from '@tabler/icons-react'
-import { useTranslations } from 'next-intl'
 
 const TAGS = [
-	{ key: 'tagAuth', icon: IconShieldCheck },
-	{ key: 'tagDb', icon: IconDatabase },
-	{ key: 'tagI18n', icon: IconLanguage },
-	{ key: 'tagTheme', icon: IconPalette },
+	{ key: 'tagAuth', label: '认证', icon: IconShieldCheck },
+	{ key: 'tagDb', label: '数据库', icon: IconDatabase },
+	{ key: 'tagTheme', label: '主题', icon: IconPalette },
 ] as const
 
 export function LoginHero() {
-	const t = useTranslations('LoginHero')
-
 	return (
 		<Paper
 			radius="lg"
@@ -93,7 +88,7 @@ export function LoginHero() {
 					<IconRocket size={20} />
 				</Paper>
 				<Text ff="var(--app-font-serif)" size="lg" fw={600} lts="0.03em">
-					{t('brand')}
+					NEXT START
 				</Text>
 			</Group>
 
@@ -130,24 +125,25 @@ export function LoginHero() {
 				    switcher — making it look interactive would mislead a11y. */}
 				<Group gap="xs">
 					<Badge variant="light" radius="xl">
-						{t('tabPrimary')}
+						快速开始
 					</Badge>
 					<Badge variant="transparent" color="gray" radius="xl">
-						{t('tabSecondary')}
+						示例代码
 					</Badge>
 				</Group>
 				<Text mt="sm" size="sm">
-					{t('cardBody')}
+					一套现成的全栈骨架：Mantine + Drizzle/SQLite +
+					Auth.js。删掉示例业务，剩下的就是你的新项目。
 				</Text>
 				<Group mt="md" gap="xs">
-					{TAGS.map(({ key, icon: TagIcon }) => (
+					{TAGS.map(({ key, label, icon: TagIcon }) => (
 						<Badge
 							key={key}
 							variant="light"
 							color="gray"
 							leftSection={<TagIcon size={12} />}
 						>
-							{t(key)}
+							{label}
 						</Badge>
 					))}
 				</Group>
@@ -181,9 +177,9 @@ export function LoginHero() {
 				fz={{ base: 30, sm: 36 }}
 				lh={1.2}
 			>
-				{t('headlineLine1')}
+				距离启动下一个项目
 				<br />
-				{t('headlineLine2')}
+				只差一次搭建
 			</Text>
 		</Paper>
 	)

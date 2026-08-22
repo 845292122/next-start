@@ -1,9 +1,9 @@
 'use client'
 
 /**
- * Last-resort boundary: this renders when `app/[locale]/layout.tsx` itself
- * throws, which is the one failure `[locale]/error.tsx` cannot catch (an error
- * file never wraps the layout of its own segment).
+ * Last-resort boundary: this renders when `app/layout.tsx` itself throws,
+ * which is the one failure `error.tsx` cannot catch (an error file never wraps
+ * the layout of its own segment).
  *
  * Because it *replaces* the root layout, three constraints apply — all of them
  * from Next, not from choices made here (see
@@ -22,16 +22,11 @@
  * ## Why this file duplicates instead of reusing
  *
  * It deliberately imports **nothing** — not `globals.css`, not `ErrorState`, not
- * Mantine, not next-intl. This is the page that has to work when the app is
- * broken, so every import is a way for it to break too: a crash originating in
- * the stylesheet, in a Mantine component (which needs `MantineProvider`, i.e. a
- * provider tree that just failed), or in the i18n request config would take the
- * error page down with it and leave the user on a blank screen. Inline styles and
- * hardcoded text can't fail that way.
- *
- * That's also why the copy is bilingual and hardcoded. Translations live behind
- * `NextIntlClientProvider`, which is inside the layout that failed, so there is
- * no locale to read here — showing both languages beats guessing wrong.
+ * Mantine. This is the page that has to work when the app is broken, so every
+ * import is a way for it to break too: a crash originating in the stylesheet or
+ * in a Mantine component (which needs `MantineProvider`, i.e. a provider tree
+ * that just failed) would take the error page down with it and leave the user on
+ * a blank screen. Inline styles and hardcoded text can't fail that way.
  */
 export default function GlobalError({
 	error,
@@ -43,7 +38,7 @@ export default function GlobalError({
 	return (
 		<html lang="zh">
 			<body>
-				<title>出错了 · Something went wrong</title>
+				<title>出错了</title>
 				{/*
 				 * A <style> element rather than inline style attributes: the
 				 * prefers-color-scheme query can't be expressed inline, and without it
@@ -81,7 +76,6 @@ export default function GlobalError({
 					.ge-card { max-width: 27rem; text-align: center; }
 					.ge-title { margin: 0 0 .75rem; font-size: 1.25rem; font-weight: 600; }
 					.ge-text { margin: 0 0 .5rem; color: var(--ge-muted); line-height: 1.6; }
-					.ge-text-en { font-size: .875rem; }
 					.ge-digest {
 						display: inline-block;
 						margin-top: .75rem;
@@ -114,11 +108,8 @@ export default function GlobalError({
 
 				<div className="ge-root">
 					<div className="ge-card">
-						<h1 className="ge-title">出错了 · Something went wrong</h1>
+						<h1 className="ge-title">出错了</h1>
 						<p className="ge-text">应用没能启动起来。重试一次通常就好了。</p>
-						<p className="ge-text ge-text-en">
-							The app failed to start. Trying again usually works.
-						</p>
 
 						{/*
 						 * In production the real message never reaches the client — only
@@ -126,9 +117,7 @@ export default function GlobalError({
 						 * thing a user can usefully report.
 						 */}
 						{error.digest && (
-							<code className="ge-digest">
-								错误编号 / error id: {error.digest}
-							</code>
+							<code className="ge-digest">错误编号：{error.digest}</code>
 						)}
 
 						<div className="ge-actions">
@@ -137,15 +126,15 @@ export default function GlobalError({
 								className="ge-btn ge-btn--primary"
 								onClick={() => retry()}
 							>
-								重试 / Try again
+								重试
 							</button>
 							{/*
 							 * A plain <a>, not next/link: this page renders when the root
 							 * layout is broken, and a hard navigation is the more reliable
-							 * way out of that state. No locale prefix — the proxy resolves it.
+							 * way out of that state.
 							 */}
 							<a className="ge-btn" href="/">
-								回到首页 / Home
+								回到首页
 							</a>
 						</div>
 					</div>

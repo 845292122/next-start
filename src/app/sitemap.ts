@@ -1,11 +1,8 @@
 import type { MetadataRoute } from 'next'
-import { localeAlternates, localeUrl } from '@/core/site-url'
-import { routing } from '@/i18n/routing'
+import { absoluteUrl } from '@/core/site-url'
 
 /**
- * Served at /sitemap.xml. Like robots.ts this lives outside `[locale]` — one
- * sitemap covers the whole origin, with each entry declaring its own language
- * alternates.
+ * Served at /sitemap.xml. Like robots.ts this covers the whole origin.
  *
  * **Only publicly reachable pages belong here.** A sitemap listing
  * `/dashboard` would be telling crawlers to fetch URLs that redirect to
@@ -41,18 +38,12 @@ const PUBLIC_PATHS: readonly string[] = []
 export const dynamic = 'force-dynamic'
 
 export default function sitemap(): MetadataRoute.Sitemap {
-	// One entry per path, on the default-locale URL, carrying hreflang for the
-	// others. Emitting a separate entry per locale instead would double the file
-	// and lose the relationship between them.
 	return PUBLIC_PATHS.map((path) => ({
-		url: localeUrl(routing.defaultLocale, path),
+		url: absoluteUrl(path),
 		// `lastModified` is honest only if it tracks the content. A static `new Date()`
 		// claims every page changed on every build, which crawlers learn to ignore —
 		// so it's set from the data for data-driven routes and left off here.
 		changeFrequency: 'monthly',
 		priority: 1,
-		alternates: {
-			languages: localeAlternates(routing.defaultLocale, path).languages,
-		},
 	}))
 }

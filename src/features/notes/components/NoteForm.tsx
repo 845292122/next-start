@@ -4,7 +4,6 @@ import { Button, Stack, Textarea, TextInput } from '@mantine/core'
 import { type FormErrors, schemaResolver, useForm } from '@mantine/form'
 import { notifications } from '@mantine/notifications'
 import { IconPlus } from '@tabler/icons-react'
-import { useTranslations } from 'next-intl'
 import { useSWRConfig } from 'swr'
 import { createNoteAction } from '@/features/notes/actions'
 import {
@@ -12,7 +11,7 @@ import {
 	createNoteSchema,
 } from '@/features/notes/schema'
 import { notesKeyFilter } from '@/features/notes/swr-keys'
-import { useActionErrorMessage } from '@/lib/action-error'
+import { getActionErrorMessage } from '@/lib/action-error'
 
 /** See the note in features/auth/components/LoginForm.tsx on `{ sync: true }`. */
 const resolveCreateNote = schemaResolver(createNoteSchema, { sync: true })
@@ -22,12 +21,11 @@ const resolveCreateNote = schemaResolver(createNoteSchema, { sync: true })
  * the server's `fields` reply, because they name the same fields.
  *
  * The schema carries no locale text (see core/auth/schema.ts), so the wording has
- * to be looked up by field name. Spelled out as a literal map so next-intl
- * typechecks the keys.
+ * to be looked up by field name.
  */
 const FIELD_MESSAGE = {
-	title: 'titleInvalid',
-	body: 'bodyInvalid',
+	title: '标题必填，最多 200 个字符',
+	body: '内容最多 5000 个字符',
 } as const satisfies Record<keyof CreateNoteValues, string>
 
 /**
@@ -36,9 +34,7 @@ const FIELD_MESSAGE = {
  * notification.
  */
 export function NoteForm() {
-	const t = useTranslations('Notes')
 	const { mutate } = useSWRConfig()
-	const errorMessage = useActionErrorMessage()
 
 	const form = useForm<CreateNoteValues>({
 		mode: 'uncontrolled',
@@ -47,7 +43,7 @@ export function NoteForm() {
 			Object.fromEntries(
 				Object.keys(resolveCreateNote(values)).map((field) => [
 					field,
-					t(FIELD_MESSAGE[field as keyof CreateNoteValues]),
+					FIELD_MESSAGE[field as keyof CreateNoteValues],
 				]),
 			),
 	})
@@ -61,7 +57,7 @@ export function NoteForm() {
 		try {
 			result = await createNoteAction(values)
 		} catch {
-			notifications.show({ color: 'red', message: t('createFailed') })
+			notifications.show({ color: 'red', message: '添加失败' })
 			return
 		}
 
@@ -76,13 +72,16 @@ export function NoteForm() {
 			if (result.fields?.length) {
 				for (const field of result.fields) {
 					if (field === 'title' || field === 'body') {
-						form.setFieldError(field, t(FIELD_MESSAGE[field]))
+						form.setFieldError(field, FIELD_MESSAGE[field])
 					}
 				}
 				return
 			}
 
-			notifications.show({ color: 'red', message: errorMessage(result) })
+			notifications.show({
+				color: 'red',
+				message: getActionErrorMessage(result),
+			})
 			return
 		}
 
@@ -94,22 +93,22 @@ export function NoteForm() {
 		// search box currently holds, and that's a different cache key.
 		await mutate(notesKeyFilter)
 		form.reset()
-		notifications.show({ color: 'teal', message: t('created') })
+		notifications.show({ color: 'teal', message: '已添加' })
 	})
 
 	return (
 		<form onSubmit={onSubmit} noValidate>
 			<Stack gap="sm">
 				<TextInput
-					label={t('titleLabel')}
-					placeholder={t('titlePlaceholder')}
+					label="标题"
+					placeholder="想记点什么？"
 					key={form.key('title')}
 					{...form.getInputProps('title')}
 				/>
 
 				<Textarea
-					label={t('bodyLabel')}
-					placeholder={t('bodyPlaceholder')}
+					label="内容"
+					placeholder="可留空"
 					rows={3}
 					key={form.key('body')}
 					{...form.getInputProps('body')}
@@ -121,7 +120,7 @@ export function NoteForm() {
 					leftSection={<IconPlus size={16} />}
 					style={{ alignSelf: 'flex-start' }}
 				>
-					{t('submit')}
+					添加
 				</Button>
 			</Stack>
 		</form>

@@ -1,11 +1,10 @@
 import { expect, test } from '@playwright/test'
 
 /**
- * The SEO surface: canonical, hreflang, robots.txt, sitemap.xml, manifest.
+ * The SEO surface: canonical, robots.txt, sitemap.xml, manifest.
  *
  * Worth testing because every failure mode here is **silent**. A missing
- * `metadataBase` doesn't throw, it just publishes localhost URLs; a wrong
- * `localePath` doesn't throw, it publishes hreflang that redirects. Nothing
+ * `metadataBase` doesn't throw, it just publishes localhost URLs. Nothing
  * surfaces until a crawler tells you months later.
  *
  * These run signed out — everything asserted here has to work for a crawler,
@@ -17,11 +16,7 @@ test.use({ storageState: { cookies: [], origins: [] } })
 const ORIGIN = 'http://localhost:3000'
 
 test.describe('page metadata', () => {
-	test('the default locale is canonical to the unprefixed URL', async ({
-		page,
-	}) => {
-		// localePrefix is 'as-needed', so the default locale has no prefix. Getting
-		// this wrong publishes a canonical that redirects.
+	test('the canonical URL is absolute', async ({ page }) => {
 		await page.goto('/')
 
 		await expect(page.locator('link[rel="canonical"]')).toHaveAttribute(
@@ -30,51 +25,23 @@ test.describe('page metadata', () => {
 		)
 	})
 
-	test('a non-default locale is canonical to its prefixed URL', async ({
-		page,
-	}) => {
-		await page.goto('/en')
-
-		await expect(page.locator('link[rel="canonical"]')).toHaveAttribute(
-			'href',
-			`${ORIGIN}/en`,
-		)
-	})
-
-	test('every locale plus x-default is declared, on both locales', async ({
-		page,
-	}) => {
-		// hreflang has to be reciprocal: each locale must list all of them, or search
-		// engines ignore the whole set. That's the mistake this catches.
-		for (const path of ['/', '/en']) {
-			await page.goto(path)
-
-			const alternates = page.locator('link[rel="alternate"]')
-			await expect(alternates).toHaveCount(3)
-
-			const hreflangs = await alternates.evaluateAll((links) =>
-				links.map((l) => l.getAttribute('hreflang')),
-			)
-			expect(new Set(hreflangs)).toEqual(new Set(['zh', 'en', 'x-default']))
-		}
-	})
-
-	test('x-default points at the default locale', async ({ page }) => {
+	test('no hreflang alternates are declared', async ({ page }) => {
+		// Single-language site: hreflang exists to disambiguate between locales, and
+		// declaring it with nothing to disambiguate is itself a mistake worth
+		// catching if the app ever regains a second language without updating this.
 		await page.goto('/')
 
-		await expect(
-			page.locator('link[rel="alternate"][hreflang="x-default"]'),
-		).toHaveAttribute('href', ORIGIN)
+		await expect(page.locator('link[rel="alternate"]')).toHaveCount(0)
 	})
 
 	test('no metadata URL is relative or points at a placeholder', async ({
 		page,
 	}) => {
 		// What a missing metadataBase actually looks like.
-		await page.goto('/en')
+		await page.goto('/')
 
 		const hrefs = await page
-			.locator('link[rel="canonical"], link[rel="alternate"]')
+			.locator('link[rel="canonical"]')
 			.evaluateAll((links) => links.map((l) => l.getAttribute('href') ?? ''))
 
 		expect(hrefs.length).toBeGreaterThan(0)
@@ -107,9 +74,7 @@ test.describe('robots.txt', () => {
 
 test.describe('sitemap.xml', () => {
 	test('is served as a well-formed, empty urlset', async ({ request }) => {
-		// Empty on purpose — see sitemap.ts. The hreflang *shape* of an entry isn't
-		// asserted here because there are no entries to assert on; that logic lives in
-		// `localeAlternates` and is unit tested in core/site-url.test.ts.
+		// Empty on purpose — see sitemap.ts.
 		const body = await (await request.get('/sitemap.xml')).text()
 
 		expect(body).toContain('<?xml')

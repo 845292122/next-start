@@ -2,8 +2,6 @@ import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
 import { MantineProvider } from '@mantine/core'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { NextIntlClientProvider } from 'next-intl'
-import messages from '@/i18n/messages/zh.json'
 
 /**
  * Component test — run by `bun run test:dom`, which preloads test/setup.ts to
@@ -25,20 +23,16 @@ const refresh = mock(() => {})
 // mock.module has to run before the component is imported, so the import below
 // is dynamic.
 mock.module('next-auth/react', () => ({ signIn }))
-mock.module('@/i18n/navigation', () => ({
+mock.module('next/navigation', () => ({
 	useRouter: () => ({ push, refresh }),
 }))
 
 const { LoginForm } = await import('@/features/auth/components/LoginForm')
 
-// Real messages rather than a stubbed useTranslations: that way a renamed or
-// missing message key fails the test instead of silently rendering a key name.
 function renderForm() {
 	return render(
 		<MantineProvider env="test">
-			<NextIntlClientProvider locale="zh" messages={messages}>
-				<LoginForm />
-			</NextIntlClientProvider>
+			<LoginForm />
 		</MantineProvider>,
 	)
 }

@@ -1,5 +1,4 @@
 import { Container, Stack, Text, Title } from '@mantine/core'
-import { getTranslations } from 'next-intl/server'
 import { getRequiredSession } from '@/core/auth/session'
 import { listNotes, NOTES_PAGE_SIZE } from '@/core/services/notes-service'
 import { NoteForm } from '@/features/notes/components/NoteForm'
@@ -16,10 +15,7 @@ import { toNoteDTO } from '@/features/notes/dto'
  * a normal path.
  */
 export default async function NotesPage() {
-	const [session, t] = await Promise.all([
-		getRequiredSession(),
-		getTranslations('Notes'),
-	])
+	const session = await getRequiredSession()
 
 	// The first page only. `listNotes` is always bounded — see notes-service.ts.
 	const page = await listNotes(session.user.id, { limit: NOTES_PAGE_SIZE })
@@ -28,9 +24,11 @@ export default async function NotesPage() {
 		<Container size="md" py={{ base: 'md', sm: 'xl' }}>
 			<Stack gap="xl">
 				<div>
-					<Title order={2}>{t('title')}</Title>
+					<Title order={2}>笔记</Title>
 					<Text size="sm" c="dimmed" mt={4}>
-						{t('description')}
+						模板自带的完整示例：SQLite 表 → drizzle service → Server
+						Action（连搜索和乐观更新也是）→ Mantine
+						界面。不需要的话整个域可以删掉。
 					</Text>
 				</div>
 

@@ -1,19 +1,15 @@
 import { Center, Stack, Text, ThemeIcon, Title } from '@mantine/core'
 import { IconFileSearch } from '@tabler/icons-react'
-import { getTranslations } from 'next-intl/server'
 import { ButtonLink } from '@/components/ui/ButtonLink'
 
 /**
- * Rendered for unmatched URLs (via app/[locale]/[...rest]/page.tsx) and for
- * notFound() thrown in this segment.
+ * Rendered for unmatched URLs and for notFound() thrown anywhere.
  *
  * It sits outside the (app) group, so it gets no rail — and deliberately so:
  * bringing AppShell in here would require a session, and a 404 has to render for
  * signed-out visitors too.
  */
-export default async function NotFound() {
-	const t = await getTranslations('Errors')
-
+export default function NotFound() {
 	return (
 		<Center mih="100dvh" p="lg">
 			<Stack align="center" gap="md" maw={400} ta="center">
@@ -21,9 +17,11 @@ export default async function NotFound() {
 					<IconFileSearch size={36} />
 				</ThemeIcon>
 				<Title order={1}>404</Title>
-				<Text c="dimmed">{t('notFound')}</Text>
+				<Text c="dimmed">
+					这个地址没有对应的页面。检查一下链接，或者回到首页重新开始。
+				</Text>
 				<ButtonLink href="/" replace variant="default">
-					{t('backHome')}
+					回到首页
 				</ButtonLink>
 			</Stack>
 		</Center>

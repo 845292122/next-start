@@ -2,17 +2,13 @@
 
 import { ActionIcon, Box, Flex, Progress, Stack, Tooltip } from '@mantine/core'
 import type { TablerIcon } from '@tabler/icons-react'
-// useLinkStatus still comes from next/link — the Link below wraps it, so the
-// hook reads the same context.
-import { useLinkStatus } from 'next/link'
-import { useTranslations } from 'next-intl'
+import Link, { useLinkStatus } from 'next/link'
+import { usePathname } from 'next/navigation'
 import { useCallback, useEffect, useState } from 'react'
 import { navLinks } from '@/components/layout/NavLinks'
 import { BlackHoleMark } from '@/components/ui/BlackHoleMark'
 import { ColorModeButton } from '@/components/ui/color-mode'
-import { LocaleSwitchButton } from '@/components/ui/locale-switch'
 import { SignOutButton } from '@/components/ui/sign-out-button'
-import { Link, usePathname } from '@/i18n/navigation'
 import classes from './AppShell.module.css'
 
 const RAIL_WIDTH = 88
@@ -83,9 +79,6 @@ function NavItem({
 }
 
 export function AppShell({ children }: { children: React.ReactNode }) {
-	const t = useTranslations('Nav')
-	// next-intl's usePathname() strips the locale prefix, so comparing against
-	// navLinks' hrefs works unchanged.
 	const pathname = usePathname()
 	const [pendingCount, setPendingCount] = useState(0)
 
@@ -107,7 +100,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 			{/* Left rail */}
 			<Stack
 				component="nav"
-				aria-label={t('mainNav')}
+				aria-label="主导航"
 				w={RAIL_WIDTH}
 				align="center"
 				gap="lg"
@@ -124,7 +117,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 							key={link.href}
 							href={link.href}
 							icon={link.icon}
-							label={t(link.labelKey)}
+							label={link.label}
 							active={pathname === link.href}
 							onPending={onPending}
 						/>
@@ -132,7 +125,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 				</Stack>
 
 				<Stack align="center" gap={4}>
-					<LocaleSwitchButton />
 					<ColorModeButton />
 					<SignOutButton />
 				</Stack>
@@ -153,7 +145,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 						animated
 						size="xs"
 						radius={0}
-						aria-label={t('loading')}
+						aria-label="页面加载中"
 						pos="absolute"
 						top={0}
 						left={0}

@@ -5,9 +5,7 @@
  *
  * Three states are kept: light / dark / auto (auto follows the OS). The API
  * matches the file of the same name in the sibling templates so code can be moved
- * between them — only the implementation underneath changes. Mantine happens to
- * use the same three words, so unlike the next-themes version this is a thin
- * pass-through rather than a translation layer.
+ * between them — only the implementation underneath changes.
  */
 
 import {
@@ -17,7 +15,6 @@ import {
 	useMantineColorScheme,
 } from '@mantine/core'
 import { IconMoon, IconSun } from '@tabler/icons-react'
-import { useTranslations } from 'next-intl'
 
 export type ColorMode = 'light' | 'dark'
 /** What the user picked; auto means "follow the OS". */
@@ -75,9 +72,8 @@ export function ColorModeIcon() {
 
 /** The light/dark toggle that sits at the bottom of the rail. */
 export function ColorModeButton() {
-	const t = useTranslations('ColorMode')
 	const { colorMode, toggleColorMode } = useColorMode()
-	const next = colorMode === 'dark' ? t('light') : t('dark')
+	const next = colorMode === 'dark' ? '浅色' : '深色'
 
 	// The *label* legitimately differs between the server render and the first
 	// client one: the server always renders the light-mode wording and the OS may
@@ -85,16 +81,12 @@ export function ColorModeButton() {
 	// jump, so the label is left to settle instead — it's an aria/tooltip string,
 	// not layout.
 	return (
-		<Tooltip
-			label={t('switchTo', { mode: next })}
-			position="right"
-			openDelay={300}
-		>
+		<Tooltip label={`切换到${next}`} position="right" openDelay={300}>
 			<ActionIcon
 				variant="subtle"
 				color="gray"
 				size="lg"
-				aria-label={t('switchToAria', { mode: next })}
+				aria-label={`切换到${next}模式`}
 				onClick={toggleColorMode}
 			>
 				<ColorModeIcon />

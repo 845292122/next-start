@@ -1,18 +1,5 @@
 import type { NextConfig } from 'next'
-import createNextIntlPlugin from 'next-intl/plugin'
 import { buildStaticSecurityHeaders } from './src/core/security-headers'
-
-const withNextIntl = createNextIntlPlugin({
-	// Given explicitly rather than relying on the plugin's src/ auto-detection.
-	requestConfig: './src/i18n/request.ts',
-	experimental: {
-		// Generates src/i18n/messages/zh.d.json.ts, which src/types/messages.d.ts
-		// feeds into next-intl's AppConfig so t() keys are typechecked. The
-		// generated file is committed: it's only written during next dev/build,
-		// and `bun run typecheck` doesn't trigger it.
-		createMessagesDeclaration: './src/i18n/messages/zh.json',
-	},
-})
 
 const nextConfig: NextConfig = {
 	// @libsql/client loads a platform-specific native addon (@libsql/darwin-arm64
@@ -56,19 +43,14 @@ const nextConfig: NextConfig = {
 		 * Rewrites `import { Button } from '@mantine/core'` into per-module imports
 		 * so a page pulls in only what it uses.
 		 *
-		 * Not cosmetic for these three packages: they are barrel files with
-		 * hundreds of re-exports (`@phosphor-icons/react` alone has ~9000), and
-		 * without this every module that imports one icon makes the compiler walk
-		 * the whole barrel on every dev rebuild. Next optimizes a fixed list of
-		 * libraries by default — `@tabler/icons-react` is on it, Phosphor and
-		 * Mantine are not, hence this entry. See
+		 * Not cosmetic for these packages: they are barrel files with hundreds of
+		 * re-exports, and without this every module that imports one icon/component
+		 * makes the compiler walk the whole barrel on every dev rebuild. Next
+		 * optimizes a fixed list of libraries by default — `@tabler/icons-react` is
+		 * on it, Mantine is not, hence this entry. See
 		 * node_modules/next/dist/docs/01-app/03-api-reference/05-config/01-next-config-js/optimizePackageImports.md.
 		 */
-		optimizePackageImports: [
-			'@mantine/core',
-			'@mantine/hooks',
-			'@phosphor-icons/react',
-		],
+		optimizePackageImports: ['@mantine/core', '@mantine/hooks'],
 	},
 
 	/**
@@ -96,4 +78,4 @@ const nextConfig: NextConfig = {
 	},
 }
 
-export default withNextIntl(nextConfig)
+export default nextConfig

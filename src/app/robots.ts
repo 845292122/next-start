@@ -4,10 +4,6 @@ import { siteUrl } from '@/core/site-url'
 /**
  * Served at /robots.txt.
  *
- * Lives at `src/app/robots.ts`, outside `[locale]` — robots.txt is per *origin*,
- * not per locale, so putting it inside the locale segment would publish it at
- * `/en/robots.txt` where no crawler looks.
- *
  * The disallow list is the interesting part. Everything here is either private or
  * pointless to index, and leaving any of it crawlable is a small but real leak:
  *
@@ -19,7 +15,7 @@ import { siteUrl } from '@/core/site-url'
  *
  * **This is not access control.** A well-behaved crawler obeys it; nothing else
  * has to. The actual guard for private routes is the session check in
- * `app/[locale]/(app)/layout.tsx`.
+ * `app/(app)/layout.tsx`.
  *
  * Note that the signed-in area (`/dashboard`, `/notes`, `/settings`) is *not*
  * listed: it already redirects anonymous visitors to `/login`, so a crawler gets

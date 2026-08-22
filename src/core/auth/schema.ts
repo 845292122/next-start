@@ -17,10 +17,10 @@ export const DEMO_VERIFICATION_CODE = '123456'
  * form in features/auth/. It lives in core/ rather than features/ so that the
  * dependency only ever points features → core, never the other way.
  *
- * No custom zod `.message()` here on purpose: this schema is shared across
- * locales, and a hardcoded message would only ever be in one language.
- * LoginForm renders its own translated text keyed off which field has an
- * error, not off `error.message`.
+ * No custom zod `.message()` here on purpose: zod's own messages are English
+ * and this app is Chinese-only, so a message straight off the schema would be
+ * the wrong language. LoginForm renders its own Chinese text keyed off which
+ * field has an error, not off `error.message`.
  */
 export const phoneOtpSchema = z.object({
 	// CN mobile numbers specifically — this template's UI defaults to zh.

@@ -87,13 +87,17 @@ test.describe('signed out', () => {
 	})
 })
 
-test('an open dropdown is still accessible', async ({ page }) => {
+test('an open dialog is still accessible', async ({ page }) => {
 	// Overlays are where a11y usually breaks: focus trapping, aria-expanded, and the
-	// popover's own contrast against whatever it covers. A page-load scan never sees
+	// overlay's own contrast against whatever it covers. A page-load scan never sees
 	// any of it because the markup doesn't exist yet.
 	await page.goto('/dashboard')
-	await page.getByRole('button', { name: '切换语言' }).click()
-	await expect(page.getByRole('menu')).toBeVisible()
+	await page.getByRole('button', { name: '退出登录' }).click()
+	await expect(page.getByRole('dialog')).toBeVisible()
+	// Mantine's modal fades in; same reasoning as the rail animation above —
+	// scanning mid-transition samples a partially-faded background and produces
+	// false contrast findings.
+	await page.waitForTimeout(300)
 
 	const { violations } = await analyze(page)
 

@@ -15,7 +15,7 @@ import { expect, test } from '@playwright/test'
  */
 
 /** Pages worth checking: the shell, a form, the design-system page, signed-out. */
-const PAGES = ['/dashboard', '/notes', '/settings', '/en/login']
+const PAGES = ['/dashboard', '/notes', '/settings', '/login']
 
 /**
  * Collects CSP violations for one navigation.
@@ -56,7 +56,7 @@ async function collectCspViolations(
 
 test.describe('response headers', () => {
 	test('a page carries the CSP and the static headers', async ({ request }) => {
-		const headers = (await request.get('/en/login')).headers()
+		const headers = (await request.get('/login')).headers()
 
 		expect(headers['content-security-policy']).toContain("default-src 'self'")
 		expect(headers['x-content-type-options']).toBe('nosniff')
@@ -80,7 +80,7 @@ test.describe('response headers', () => {
 	test('the nonce is different on every request', async ({ request }) => {
 		// A reused nonce is worth no more than 'unsafe-inline'.
 		const nonceOf = async () => {
-			const csp = (await request.get('/en/login')).headers()[
+			const csp = (await request.get('/login')).headers()[
 				'content-security-policy'
 			]
 			return /'nonce-([^']+)'/.exec(csp ?? '')?.[1]
@@ -106,7 +106,7 @@ test.describe('the app runs under the production CSP', () => {
 		// The sharpest check of the nonce wiring. `<ColorSchemeScript>` is an inline
 		// <script> that sets the scheme attribute before first paint; Next tags its
 		// own scripts with the nonce but knows nothing about that one, so
-		// app/[locale]/layout.tsx forwards `x-nonce` to it by hand. If that breaks,
+		// app/layout.tsx forwards `x-nonce` to it by hand. If that breaks,
 		// the script is refused and <html> keeps the static 'light' that
 		// `mantineHtmlProps` wrote — i.e. the flash of the wrong scheme this script
 		// exists to prevent.
@@ -119,19 +119,18 @@ test.describe('the app runs under the production CSP', () => {
 	})
 
 	test('a Mantine overlay still positions itself', async ({ page }) => {
-		// Mantine positions popovers with inline `style` attributes, which nonces
-		// never cover — the reason style-src settles for 'unsafe-inline' (see
-		// core/security-headers.ts). A popover collapsed at 0,0 or unstyled is the
+		// Mantine positions popovers/tooltips with inline `style` attributes, which
+		// nonces never cover — the reason style-src settles for 'unsafe-inline' (see
+		// core/security-headers.ts). An overlay collapsed at 0,0 or unstyled is the
 		// symptom if that regresses.
 		await page.goto('/dashboard')
 
-		const trigger = page.getByRole('button', { name: '切换语言' })
-		await trigger.click()
+		await page.getByRole('button', { name: '退出登录' }).hover()
 
-		const menu = page.getByRole('menu')
-		await expect(menu).toBeVisible()
+		const tooltip = page.getByRole('tooltip')
+		await expect(tooltip).toBeVisible()
 
-		const box = await menu.boundingBox()
+		const box = await tooltip.boundingBox()
 		expect(box).not.toBeNull()
 		// Positioned somewhere real, not collapsed at the origin.
 		expect(box?.width ?? 0).toBeGreaterThan(0)

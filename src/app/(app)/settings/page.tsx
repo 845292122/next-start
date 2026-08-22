@@ -12,35 +12,35 @@ import {
 	Title,
 } from '@mantine/core'
 import { IconDeviceDesktop, IconMoon, IconSun } from '@tabler/icons-react'
-import { useTranslations } from 'next-intl'
 import { type ThemeMode, useColorMode } from '@/components/ui/color-mode'
+
+const NOTIFICATIONS = [
+	{ key: 'buildDone', label: '构建完成时通知我' },
+	{ key: 'deployFailed', label: '部署失败时通知我' },
+	{ key: 'weeklyDigest', label: '每周汇总邮件' },
+] as const
 
 /** Placeholder page — copy this file as the starting point for a new one. */
 export default function Settings() {
-	const t = useTranslations('Settings')
 	const { mode, setMode, colorMode } = useColorMode()
 
 	return (
 		<Container size="sm" py={{ base: 'md', sm: 'xl' }}>
 			<Stack gap="xl">
 				<div>
-					<Title order={2}>{t('title')}</Title>
+					<Title order={2}>设置</Title>
 					<Text size="sm" c="dimmed" mt={4}>
-						{t('description')}
+						占位页面。新增页面：在 src/app/(app) 下建目录，然后到
+						src/components/layout/NavLinks.ts 加一条导航项。
 					</Text>
 				</div>
 
 				{/* Colour scheme: three states (follow the OS / light / dark) */}
 				<Card withBorder padding="lg" radius="md">
-					<Text fw={600}>{t('appearance.title')}</Text>
+					<Text fw={600}>外观</Text>
 					<Text size="xs" c="dimmed">
-						{t('appearance.current', {
-							mode:
-								colorMode === 'dark'
-									? t('appearance.dark')
-									: t('appearance.light'),
-						})}
-						{mode === 'auto' ? t('appearance.followingSystem') : ''}
+						当前生效：{colorMode === 'dark' ? '深色' : '浅色'}
+						{mode === 'auto' ? '（跟随系统）' : ''}
 					</Text>
 					<Divider my="md" />
 					{/*
@@ -59,7 +59,7 @@ export default function Settings() {
 								label: (
 									<Group gap={6} justify="center" wrap="nowrap">
 										<IconDeviceDesktop size={16} />
-										{t('appearance.system')}
+										跟随系统
 									</Group>
 								),
 							},
@@ -68,7 +68,7 @@ export default function Settings() {
 								label: (
 									<Group gap={6} justify="center" wrap="nowrap">
 										<IconSun size={16} />
-										{t('appearance.light')}
+										浅色
 									</Group>
 								),
 							},
@@ -77,7 +77,7 @@ export default function Settings() {
 								label: (
 									<Group gap={6} justify="center" wrap="nowrap">
 										<IconMoon size={16} />
-										{t('appearance.dark')}
+										深色
 									</Group>
 								),
 							},
@@ -86,21 +86,19 @@ export default function Settings() {
 				</Card>
 
 				<Card withBorder padding="lg" radius="md">
-					<Text fw={600}>{t('notifications.title')}</Text>
+					<Text fw={600}>通知</Text>
 					<Text size="xs" c="dimmed">
-						{t('notifications.note')}
+						占位开关，接上你自己的偏好存储即可
 					</Text>
 					<Divider my="md" />
 					<Stack gap="sm">
-						{(['buildDone', 'deployFailed', 'weeklyDigest'] as const).map(
-							(key) => (
-								<Switch
-									key={key}
-									label={t(`notifications.${key}`)}
-									defaultChecked={key !== 'weeklyDigest'}
-								/>
-							),
-						)}
+						{NOTIFICATIONS.map(({ key, label }) => (
+							<Switch
+								key={key}
+								label={label}
+								defaultChecked={key !== 'weeklyDigest'}
+							/>
+						))}
 					</Stack>
 				</Card>
 			</Stack>

@@ -31,7 +31,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
   inline.** Scripts are nonce + `'strict-dynamic'`; there is no `'unsafe-eval'` in production, so
   any library that compiles code at runtime will be refused (this is why
   `src/core/zod-config.ts` disables zod's JIT in the browser). A third-party inline `<script>`
-  needs the nonce forwarded from `app/[locale]/layout.tsx`, the way next-themes' is.
+  needs the nonce forwarded from `app/layout.tsx`, the way Mantine's `<ColorSchemeScript>` is.
   `e2e/security.e2e.ts` fails on any CSP violation — don't loosen the policy to make it pass
   without reading the reasoning in `DEVELOPMENT.md § 安全`.
 - **Errors have a contract — don't hand-roll one.** Services throw the typed errors in

@@ -54,7 +54,7 @@ export const authConfig: NextAuthConfig = {
 	pages: {
 		// Without this, an unauthenticated Auth.js redirect lands on its own
 		// built-in page at /api/auth/signin instead of the one in
-		// app/[locale]/(auth)/login. No locale prefix: the proxy resolves it.
+		// app/(auth)/login.
 		signIn: '/login',
 	},
 	providers: [

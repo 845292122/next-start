@@ -16,7 +16,6 @@ import {
 } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
 import { IconPencil, IconSearch, IconTrash } from '@tabler/icons-react'
-import { useFormatter, useTranslations } from 'next-intl'
 import { useState } from 'react'
 import useSWR from 'swr'
 import {
@@ -26,7 +25,13 @@ import {
 } from '@/features/notes/actions'
 import type { NoteDTO, NotePage } from '@/features/notes/dto'
 import { notesKey } from '@/features/notes/swr-keys'
-import { useActionErrorMessage } from '@/lib/action-error'
+import { getActionErrorMessage } from '@/lib/action-error'
+
+/** Module-level — a fixed locale/format, so there's no reason to recreate it per render. */
+const dateFormatter = new Intl.DateTimeFormat('zh-CN', {
+	dateStyle: 'medium',
+	timeStyle: 'short',
+})
 
 /**
  * Search-as-you-type and optimistic updates, all on Server Actions.
@@ -45,9 +50,6 @@ export function NoteList({
 	/** The service's default page size, passed down so the two can't drift. */
 	pageSize: number
 }) {
-	const t = useTranslations('Notes')
-	const format = useFormatter()
-	const errorMessage = useActionErrorMessage()
 	const [query, setQuery] = useState('')
 	// Grows the window rather than paging: one SWR cache entry per (query, limit),
 	// so the optimistic toggle/delete below stay simple — they only ever have one
@@ -70,7 +72,7 @@ export function NoteList({
 				query: q || undefined,
 				limit: take,
 			})
-			if (!result.ok) throw new Error(errorMessage(result))
+			if (!result.ok) throw new Error(getActionErrorMessage(result))
 			return result.data
 		},
 		{
@@ -90,7 +92,7 @@ export function NoteList({
 		await mutate(
 			async () => {
 				const result = await toggleNoteAction({ id: note.id })
-				if (!result.ok) throw new Error(errorMessage(result))
+				if (!result.ok) throw new Error(getActionErrorMessage(result))
 				return undefined
 			},
 			{
@@ -112,7 +114,7 @@ export function NoteList({
 		await mutate(
 			async () => {
 				const result = await deleteNoteAction({ id: note.id })
-				if (!result.ok) throw new Error(errorMessage(result))
+				if (!result.ok) throw new Error(getActionErrorMessage(result))
 				return undefined
 			},
 			{
@@ -141,14 +143,14 @@ export function NoteList({
 				type="search"
 				value={query}
 				onChange={(event) => setQuery(event.currentTarget.value)}
-				aria-label={t('searchLabel')}
-				placeholder={t('searchPlaceholder')}
+				aria-label="搜索笔记"
+				placeholder="按标题搜索（大小写无关）"
 				leftSection={<IconSearch size={16} />}
 				rightSection={
 					query ? (
 						<CloseButton
 							size="sm"
-							aria-label={t('searchClear')}
+							aria-label="清空搜索"
 							onClick={() => setQuery('')}
 						/>
 					) : undefined
@@ -174,7 +176,7 @@ export function NoteList({
 									mt={2}
 									checked={note.done}
 									onChange={() => toggle(note)}
-									aria-label={t('toggleLabel', { title: note.title })}
+									aria-label={`把「${note.title}」标记为完成或未完成`}
 								/>
 								<div style={{ minWidth: 0, flex: 1 }}>
 									<Text
@@ -197,19 +199,15 @@ export function NoteList({
 									<Text size="xs" c="dimmed" mt={4}>
 										{/*
 										 * createdAt is an ISO string, not a Date — see
-										 * features/notes/dto.ts for why. next-intl's formatter needs
-										 * a Date, hence the parse here.
+										 * features/notes/dto.ts for why — hence the parse here.
 										 */}
-										{format.dateTime(new Date(note.createdAt), {
-											dateStyle: 'medium',
-											timeStyle: 'short',
-										})}
+										{dateFormatter.format(new Date(note.createdAt))}
 									</Text>
 								</div>
 								<ActionIcon
 									variant="subtle"
 									color="red"
-									aria-label={t('deleteLabel', { title: note.title })}
+									aria-label={`删除「${note.title}」`}
 									onClick={() => remove(note)}
 								>
 									<IconTrash size={16} />
@@ -222,8 +220,8 @@ export function NoteList({
 				<EmptyState
 					py="xl"
 					icon={<IconPencil size={32} />}
-					title={query ? t('noResults') : t('empty')}
-					description={query ? t('noResultsHint') : t('emptyHint')}
+					title={query ? '没有匹配的笔记' : '还没有笔记'}
+					description={query ? '换个关键词试试。' : '用上面的表单添加第一条。'}
 				/>
 			)}
 
@@ -238,7 +236,7 @@ export function NoteList({
 					onClick={() => setLimit((current) => current + pageSize)}
 					style={{ alignSelf: 'center' }}
 				>
-					{t('loadMore', { remaining: page.total - page.items.length })}
+					还有 {page.total - page.items.length} 条，加载更多
 				</Button>
 			)}
 		</Stack>

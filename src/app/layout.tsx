@@ -1,13 +1,9 @@
 import { ColorSchemeScript, mantineHtmlProps } from '@mantine/core'
 import type { Metadata } from 'next'
 import { headers } from 'next/headers'
-import { notFound } from 'next/navigation'
-import { hasLocale, NextIntlClientProvider } from 'next-intl'
-import { getTranslations, setRequestLocale } from 'next-intl/server'
 import { AppProviders } from '@/components/providers/AppProviders'
 import { auth } from '@/core/auth'
-import { localeAlternates, localeUrl, siteUrl } from '@/core/site-url'
-import { routing } from '@/i18n/routing'
+import { siteUrl } from '@/core/site-url'
 /*
  * Stylesheet order is load-bearing, which is why these are four JS imports here
  * rather than `@import` lines inside globals.css:
@@ -29,58 +25,30 @@ import '@/components/providers/mantine-overrides.css'
 import '@/app/globals.css'
 
 /**
- * This is the root layout — there is no src/app/layout.tsx. Everything that
- * renders HTML lives under [locale]; src/app/api/ is route handlers only, which
- * don't need a layout.
+ * This is the root layout — src/app/api/ is route handlers only, which don't
+ * need a layout.
  */
-export async function generateMetadata({
-	params,
-}: LayoutProps<'/[locale]'>): Promise<Metadata> {
-	// generateMetadata runs independently of the layout below, so the same
-	// untrusted-locale guard is needed here. Falling back rather than calling
-	// notFound() — the layout is what owns the 404.
-	const { locale } = await params
-	const resolved = hasLocale(routing.locales, locale)
-		? locale
-		: routing.defaultLocale
-	const t = await getTranslations({ locale: resolved, namespace: 'Meta' })
-
-	return {
-		// Without metadataBase every relative URL in metadata (Open Graph images
-		// above all) resolves against localhost, silently, and social scrapers get a
-		// dead link. See core/site-url.ts.
-		metadataBase: new URL(siteUrl),
-		title: t('title'),
-		description: t('description'),
-		// The canonical URL plus hreflang for every locale. A bilingual site without
-		// this has the two locales competing as duplicate content.
-		alternates: localeAlternates(resolved),
-		openGraph: {
-			type: 'website',
-			locale: resolved,
-			url: localeUrl(resolved),
-			title: t('title'),
-			description: t('description'),
-		},
-	}
+export const metadata: Metadata = {
+	// Without metadataBase every relative URL in metadata (Open Graph images
+	// above all) resolves against localhost, silently, and social scrapers get a
+	// dead link. See core/site-url.ts.
+	metadataBase: new URL(siteUrl),
+	title: 'Next Start',
+	description: '全栈 Next.js 项目模板',
+	alternates: { canonical: siteUrl },
+	openGraph: {
+		type: 'website',
+		url: siteUrl,
+		title: 'Next Start',
+		description: '全栈 Next.js 项目模板',
+	},
 }
 
 export const viewport = {
 	viewportFit: 'cover' as const,
 }
 
-export default async function RootLayout({
-	children,
-	params,
-}: LayoutProps<'/[locale]'>) {
-	// params.locale is untrusted — /xx/dashboard would land here with "xx".
-	const { locale } = await params
-	if (!hasLocale(routing.locales, locale)) notFound()
-
-	// Opts this segment into static rendering where possible; without it,
-	// anything reading the locale forces a dynamic render.
-	setRequestLocale(locale)
-
+export default async function RootLayout({ children }: LayoutProps<'/'>) {
 	const session = await auth()
 
 	// `ColorSchemeScript` below is a blocking inline <script>, which a nonce-based
@@ -103,7 +71,7 @@ export default async function RootLayout({
 		 *   ColorSchemeScript overwrites the attribute pre-paint, so the server
 		 *   markup and the DOM legitimately differ on this element.
 		 */
-		<html lang={locale} {...mantineHtmlProps}>
+		<html lang="zh" {...mantineHtmlProps}>
 			<head>
 				{/*
 				 * Runs before first paint and sets data-mantine-color-scheme from
@@ -115,19 +83,12 @@ export default async function RootLayout({
 			</head>
 			<body>
 				{/*
-				 * No props needed: rendered from a Server Component,
-				 * NextIntlClientProvider resolves locale, messages, formats and time
-				 * zone from the request config itself.
+				 * The rail lives in app/(app)/layout.tsx, not here — the (auth)
+				 * group renders full-screen without it.
 				 */}
-				<NextIntlClientProvider>
-					{/*
-					 * The rail lives in app/[locale]/(app)/layout.tsx, not here — the
-					 * (auth) group renders full-screen without it.
-					 */}
-					<AppProviders session={session} nonce={nonce}>
-						{children}
-					</AppProviders>
-				</NextIntlClientProvider>
+				<AppProviders session={session} nonce={nonce}>
+					{children}
+				</AppProviders>
 			</body>
 		</html>
 	)

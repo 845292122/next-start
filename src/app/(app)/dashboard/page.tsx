@@ -30,7 +30,6 @@ import {
 	IconStack,
 	type TablerIcon,
 } from '@tabler/icons-react'
-import { useTranslations } from 'next-intl'
 import { useState } from 'react'
 
 /**
@@ -108,7 +107,6 @@ const SHADES = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] as const
 const ROLES = ['blue', 'teal', 'yellow', 'red', 'gray'] as const
 
 export default function Dashboard() {
-	const t = useTranslations('Dashboard')
 	const [density, setDensity] = useState('comfortable')
 	const [notify, setNotify] = useState(true)
 	const [volume, setVolume] = useState(40)
@@ -118,16 +116,15 @@ export default function Dashboard() {
 			{/* Header */}
 			<Stack gap={4} mb="xl">
 				<Text size="sm" fw={600} c="var(--mantine-primary-color-filled)">
-					{t('eyebrow')}
+					Mantine · 主题与组件
 				</Text>
 				<Title order={1} fz={30}>
-					{t('title')}
+					设计系统一览
 				</Title>
 				<Text c="dimmed" maw={560}>
-					{/* t.rich, not t: the message wraps the file path in <code> */}
-					{t.rich('description', {
-						code: (chunks) => <Code>{chunks}</Code>,
-					})}
+					这一页把主题里的色阶和常用组件摆出来。Mantine 的主题是一个 JS 对象，改{' '}
+					<Code>src/components/providers/theme.ts</Code>{' '}
+					就能看到全部组件跟着变。
 				</Text>
 			</Stack>
 
@@ -135,27 +132,30 @@ export default function Dashboard() {
 				{/* Stat cards */}
 				<SimpleGrid cols={{ base: 1, sm: 3 }} spacing="md">
 					<StatCard
-						label={t('stats.layout.label')}
-						value={t('stats.layout.value')}
-						hint={t('stats.layout.hint')}
+						label="布局"
+						value="导航栏"
+						hint="侧边栏 + 内容区 + 过渡动画"
 						icon={IconStack}
 					/>
 					<StatCard
-						label={t('stats.theme.label')}
-						value={t('stats.theme.value')}
-						hint={t('stats.theme.hint')}
+						label="主题"
+						value="CSS 变量"
+						hint="语义色角色，明暗自动适配"
 						icon={IconPalette}
 					/>
 					<StatCard
-						label={t('stats.platform.label')}
-						value={t('stats.platform.value')}
-						hint={t('stats.platform.hint')}
+						label="平台"
+						value="Web + SSR"
+						hint="服务端组件与客户端组件共用一套样式"
 						icon={IconBolt}
 					/>
 				</SimpleGrid>
 
 				{/* Colour scales */}
-				<Section title={t('palette.title')} note={t('palette.note')}>
+				<Section
+					title="颜色与色阶"
+					note="Mantine 的每个颜色都是 0–9 十级色阶，组件的 variant 从色阶推导；theme.primaryColor 决定整套 UI 用哪一组"
+				>
 					<Stack gap="md">
 						<Group gap={0} wrap="nowrap">
 							{SHADES.map((shade) => (
@@ -210,7 +210,10 @@ export default function Dashboard() {
 
 				<SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
 					{/* Buttons */}
-					<Section title={t('buttons.title')} note={t('buttons.note')}>
+					<Section
+						title="按钮"
+						note="Mantine 的 variant 系统：filled / light / outline / subtle / default，颜色由 color 单独决定"
+					>
 						<Stack gap="sm">
 							<Group gap="xs">
 								<Button size="xs">Filled</Button>
@@ -239,16 +242,19 @@ export default function Dashboard() {
 					</Section>
 
 					{/* Badges and notifications */}
-					<Section title={t('chips.title')} note={t('chips.note')}>
+					<Section
+						title="标签与消息"
+						note="Badge 用于状态展示；notifications.show() 取代了 toast，前提是挂了一个 Notifications 组件"
+					>
 						<Stack gap="md">
 							<Group gap="xs">
-								<Badge>{t('chips.default')}</Badge>
-								<Badge color="teal">{t('chips.live')}</Badge>
+								<Badge>默认</Badge>
+								<Badge color="teal">已上线</Badge>
 								<Badge color="red" variant="light">
-									{t('chips.buildFailed')}
+									构建失败
 								</Badge>
 								<Badge color="yellow" variant="light">
-									{t('chips.archived')}
+									已归档
 								</Badge>
 							</Group>
 							<Group gap="xs">
@@ -257,13 +263,10 @@ export default function Dashboard() {
 									variant="light"
 									leftSection={<IconBell size={16} />}
 									onClick={() =>
-										notifications.show({
-											color: 'teal',
-											message: t('chips.toastSuccess'),
-										})
+										notifications.show({ color: 'teal', message: '部署完成' })
 									}
 								>
-									{t('chips.toastTrigger')}
+									成功消息
 								</Button>
 								<Button
 									size="xs"
@@ -272,11 +275,11 @@ export default function Dashboard() {
 									onClick={() =>
 										notifications.show({
 											color: 'red',
-											message: t('chips.toastDanger'),
+											message: '部署失败，请查看日志',
 										})
 									}
 								>
-									{t('chips.toastDangerTrigger')}
+									失败消息
 								</Button>
 							</Group>
 						</Stack>
@@ -285,19 +288,19 @@ export default function Dashboard() {
 
 				<SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
 					{/* Form controls */}
-					<Section title={t('form.title')} note={t('form.note')}>
+					<Section
+						title="表单控件"
+						note="TextInput 自带 label / description / error 三个槽位，不用自己拼"
+					>
 						<Stack gap="md">
 							<TextInput
-								label={t('form.projectName')}
+								label="项目名称"
 								defaultValue="acme-console"
 								placeholder="acme-console"
 							/>
-							<TextInput
-								label={t('form.remark')}
-								placeholder={t('form.remarkPlaceholder')}
-							/>
+							<TextInput label="备注" placeholder="可留空" />
 							<Switch
-								label={t('form.notify')}
+								label="接收构建通知"
 								checked={notify}
 								onChange={(event) => setNotify(event.currentTarget.checked)}
 							/>
@@ -305,7 +308,10 @@ export default function Dashboard() {
 					</Section>
 
 					{/* Selection and progress */}
-					<Section title={t('controls.title')} note={t('controls.note')}>
+					<Section
+						title="选择与进度"
+						note="SegmentedControl / Slider / Progress，给一个 data 数组就行，不用逐个写子组件"
+					>
 						<Stack gap="lg">
 							{/*
 							 * One component with a `data` array, where the react-aria original
@@ -317,42 +323,38 @@ export default function Dashboard() {
 								value={density}
 								onChange={setDensity}
 								data={[
-									{ value: 'compact', label: t('controls.compact') },
-									{ value: 'comfortable', label: t('controls.comfortable') },
-									{ value: 'spacious', label: t('controls.spacious') },
+									{ value: 'compact', label: '紧凑' },
+									{ value: 'comfortable', label: '适中' },
+									{ value: 'spacious', label: '宽松' },
 								]}
 							/>
 
 							<div>
 								<Text size="sm" mb="xs">
-									{t('controls.volume', { value: volume })}
+									音量 {volume}%
 								</Text>
 								{/*
 								 * thumbLabel, not aria-label: the thumb is the element carrying
 								 * role="slider", so that's where the accessible name has to
 								 * land. Caught by e2e/a11y.e2e.ts otherwise.
 								 */}
-								<Slider
-									value={volume}
-									onChange={setVolume}
-									thumbLabel={t('controls.volumeLabel')}
-								/>
+								<Slider value={volume} onChange={setVolume} thumbLabel="音量" />
 							</div>
 
 							<div>
 								<Text size="sm" mb="xs">
-									{t('controls.buildProgress')}
+									构建进度
 								</Text>
 								{/* Same reasoning: Progress forwards aria-label to its inner
 								    section, which is what has role="progressbar". */}
-								<Progress value={72} aria-label={t('controls.buildProgress')} />
+								<Progress value={72} aria-label="构建进度" />
 							</div>
 						</Stack>
 					</Section>
 				</SimpleGrid>
 
 				{/* Alerts and tooltips */}
-				<Section title={t('surfaces.title')} note={t('surfaces.note')}>
+				<Section title="提示与浮层" note="Alert 的语义色，以及 Tooltip">
 					<Stack gap="md">
 						{ROLES.map((role) => (
 							<Alert
@@ -360,19 +362,19 @@ export default function Dashboard() {
 								color={role}
 								variant="light"
 								icon={<IconInfoCircle size={18} />}
-								title={t('surfaces.alertTitle', { status: role })}
+								title={`这是一条 ${role} 提示`}
 							>
-								{t('surfaces.alertBody')}
+								Alert 的配色来自 color 指定的那组色阶，换主题时不用改这里。
 							</Alert>
 						))}
 						<Group gap="xs">
 							<Tooltip
-								label={t('surfaces.tooltipBody')}
+								label="Tooltip 由 floating-ui 驱动，默认只在悬停时出现"
 								withArrow
 								openDelay={200}
 							>
 								<Button size="xs" variant="outline">
-									{t('surfaces.tooltipTrigger')}
+									悬停看提示
 								</Button>
 							</Tooltip>
 						</Group>

@@ -4,7 +4,6 @@ import { ActionIcon, Button, Group, Modal, Text, Tooltip } from '@mantine/core'
 import { useDisclosure } from '@mantine/hooks'
 import { IconLogout } from '@tabler/icons-react'
 import { signOut } from 'next-auth/react'
-import { useTranslations } from 'next-intl'
 
 /**
  * The rail's sign-out control: an icon button that asks for confirmation before
@@ -17,17 +16,16 @@ import { useTranslations } from 'next-intl'
  * the *app* raises unprompted.
  */
 export function SignOutButton() {
-	const t = useTranslations('Account')
 	const [opened, { open, close }] = useDisclosure(false)
 
 	return (
 		<>
-			<Tooltip label={t('signOut')} position="right" openDelay={300}>
+			<Tooltip label="退出登录" position="right" openDelay={300}>
 				<ActionIcon
 					variant="subtle"
 					color="gray"
 					size="lg"
-					aria-label={t('signOut')}
+					aria-label="退出登录"
 					onClick={open}
 				>
 					<IconLogout size={18} />
@@ -37,24 +35,23 @@ export function SignOutButton() {
 			<Modal
 				opened={opened}
 				onClose={close}
-				title={t('signOutTitle')}
+				title="确认退出登录？"
 				size="sm"
 				centered
+				// Mantine's close button carries no default aria-label — an icon-only
+				// button with none is a critical a11y violation. Caught by
+				// e2e/a11y.e2e.ts, which opens this exact modal.
+				closeButtonProps={{ 'aria-label': '关闭' }}
 			>
 				<Text size="sm" c="dimmed">
-					{t('signOutBody')}
+					退出后需要重新用手机号和验证码登录。
 				</Text>
 				<Group justify="flex-end" mt="lg">
 					<Button variant="default" onClick={close}>
-						{t('cancel')}
+						取消
 					</Button>
-					<Button
-						color="red"
-						// redirectTo is unprefixed on purpose — the proxy resolves it to the
-						// active locale.
-						onClick={() => signOut({ redirectTo: '/login' })}
-					>
-						{t('signOutConfirm')}
+					<Button color="red" onClick={() => signOut({ redirectTo: '/login' })}>
+						确认退出
 					</Button>
 				</Group>
 			</Modal>

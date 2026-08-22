@@ -17,15 +17,14 @@ import {
 	IconPhone,
 	IconShieldCheck,
 } from '@tabler/icons-react'
+import { useRouter } from 'next/navigation'
 import { signIn } from 'next-auth/react'
-import { useTranslations } from 'next-intl'
 import { useEffect, useState } from 'react'
 import {
 	DEMO_VERIFICATION_CODE,
 	type PhoneOtp,
 	phoneOtpSchema,
 } from '@/core/auth/schema'
-import { useRouter } from '@/i18n/navigation'
 
 const RESEND_SECONDS = 60
 
@@ -48,22 +47,18 @@ const resolvePhoneOtp = schemaResolver(phoneOtpSchema, { sync: true })
  * carries no locale-specific text, so what zod produces is an untranslatable
  * English string. Keying off *which* field failed is the whole approach — the same
  * one NoteForm takes for server-reported field errors.
- *
- * A literal map rather than `t(\`${field}Invalid\`)` so next-intl's generated key
- * types check it: rename a message and typecheck fails here.
  */
 const FIELD_MESSAGE = {
-	phone: 'phoneInvalid',
-	code: 'codeInvalid',
+	phone: '请输入正确的手机号',
+	code: '请输入 6 位验证码',
 } as const satisfies Record<keyof PhoneOtp, string>
 
 /**
  * The interactive half of the sign-in screen. Kept apart from
- * app/[locale]/(auth)/login/page.tsx so that 'use client' stops at the leaf and the
+ * app/(auth)/login/page.tsx so that 'use client' stops at the leaf and the
  * page itself stays a Server Component.
  */
 export function LoginForm() {
-	const t = useTranslations('Login')
 	const router = useRouter()
 	const [subscribe, setSubscribe] = useState(true)
 	const [countdown, setCountdown] = useState(0)
@@ -88,7 +83,7 @@ export function LoginForm() {
 			Object.fromEntries(
 				Object.keys(resolvePhoneOtp(values)).map((field) => [
 					field,
-					t(FIELD_MESSAGE[field as keyof PhoneOtp]),
+					FIELD_MESSAGE[field as keyof PhoneOtp],
 				]),
 			),
 	})
@@ -105,7 +100,7 @@ export function LoginForm() {
 		// what to type and start the resend cooldown.
 		notifications.show({
 			color: 'teal',
-			message: t('demoCodeToast', { code: DEMO_VERIFICATION_CODE }),
+			message: `演示环境验证码固定为 ${DEMO_VERIFICATION_CODE}`,
 		})
 		setCountdown(RESEND_SECONDS)
 	}
@@ -120,7 +115,7 @@ export function LoginForm() {
 		})
 
 		if (result?.error) {
-			setFormError(t('invalidCredentials'))
+			setFormError('验证码不正确。')
 			return
 		}
 
@@ -147,15 +142,15 @@ export function LoginForm() {
 				lh={1.15}
 				lts="-0.02em"
 			>
-				{t('title')}
+				手机号登录
 			</Title>
 
 			<Stack gap="sm" mt="xl">
 				<TextInput
-					label={t('phoneLabel')}
+					label="手机号"
 					type="tel"
 					autoComplete="tel"
-					placeholder={t('phonePlaceholder')}
+					placeholder="请输入手机号"
 					// leftSection is the supported way to put an affix inside a field: it
 					// sits inside the input's own border and shifts the text padding, so
 					// an absolutely positioned icon isn't needed and can't overlap typing.
@@ -165,10 +160,10 @@ export function LoginForm() {
 				/>
 
 				<TextInput
-					label={t('codeLabel')}
+					label="验证码"
 					inputMode="numeric"
 					autoComplete="one-time-code"
-					placeholder={t('codePlaceholder')}
+					placeholder="6 位验证码"
 					leftSection={<IconShieldCheck size={18} />}
 					rightSection={
 						<Button
@@ -177,9 +172,7 @@ export function LoginForm() {
 							disabled={countdown > 0}
 							onClick={handleSendCode}
 						>
-							{countdown > 0
-								? t('resendIn', { seconds: countdown })
-								: t('sendCode')}
+							{countdown > 0 ? `${countdown} 秒后重发` : '获取验证码'}
 						</Button>
 					}
 					// Both are required for an interactive right section: the width
@@ -194,7 +187,7 @@ export function LoginForm() {
 
 				<Checkbox
 					size="sm"
-					label={t('subscribeLabel')}
+					label="接收产品更新和使用技巧"
 					checked={subscribe}
 					onChange={(event) => setSubscribe(event.currentTarget.checked)}
 				/>
@@ -214,33 +207,30 @@ export function LoginForm() {
 					fw={600}
 					loading={form.submitting}
 				>
-					{t('submit')}
+					登录
 				</Button>
 
 				<Text size="sm" c="dimmed" ta="center">
-					{t('demoHint', {
-						phone: '13800000000',
-						code: DEMO_VERIFICATION_CODE,
-					})}
+					演示手机号 13800000000，验证码固定 {DEMO_VERIFICATION_CODE}
 				</Text>
 
 				<Text size="xs" c="dimmed" ta="center">
-					{t('termsPrefix')}
+					继续即代表同意
 					{/* component="button" so these are real buttons, not links to
 					    nowhere — they have no href yet. */}
 					<Anchor component="button" type="button" size="xs" fw={500}>
-						{t('privacyPolicy')}
+						《隐私政策》
 					</Anchor>
-					{t('termsConjunction')}
+					与
 					<Anchor component="button" type="button" size="xs" fw={500}>
-						{t('termsOfService')}
+						《服务条款》
 					</Anchor>
 				</Text>
 			</Stack>
 
 			{/* One component, not two separators around a span: Mantine's Divider takes
 			    the label itself. */}
-			<Divider label={t('divider')} labelPosition="center" my="lg" />
+			<Divider label="或" labelPosition="center" my="lg" />
 
 			{/* Not wired to a provider; see core/auth/config.ts to add one. */}
 			<Button
@@ -251,7 +241,7 @@ export function LoginForm() {
 				disabled
 				leftSection={<IconBrandWechat size={22} color="#07C160" />}
 			>
-				{t('wechatButton')}
+				微信登录（未接入）
 			</Button>
 		</form>
 	)

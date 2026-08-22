@@ -2,7 +2,7 @@
  * App-level global CSS.
  *
  * Small on purpose. Mantine's own `styles.css` — imported from
- * `app/[locale]/layout.tsx`, not from here, because the import *order* between
+ * `app/layout.tsx`, not from here, because the import *order* between
  * the two Mantine stylesheets is load-bearing and JS imports make it explicit —
  * already carries the reset, the `body` font/background/colour, and every
  * `--mantine-*` variable. Component styling belongs in a co-located
