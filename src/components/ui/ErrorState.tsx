@@ -10,7 +10,7 @@ import {
 	ThemeIcon,
 	Title,
 } from '@mantine/core'
-import { WarningIcon } from '@phosphor-icons/react'
+import { IconAlertTriangle } from '@tabler/icons-react'
 
 /**
  * The shared body of the error boundaries — `app/[locale]/error.tsx` and
@@ -56,7 +56,7 @@ export function ErrorState({
 		<Center mih="60vh" p="lg">
 			<Stack align="center" gap="md" maw={400} ta="center">
 				<ThemeIcon color="red" variant="light" size={72} radius="xl">
-					<WarningIcon size={36} />
+					<IconAlertTriangle size={36} />
 				</ThemeIcon>
 				{/*
 				 * order={1} for the document outline, size="h2" for the visual weight —

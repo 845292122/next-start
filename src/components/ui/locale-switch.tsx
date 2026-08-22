@@ -9,7 +9,7 @@
  */
 
 import { ActionIcon, Menu, Tooltip } from '@mantine/core'
-import { CheckIcon, TranslateIcon } from '@phosphor-icons/react'
+import { IconCheck, IconLanguage } from '@tabler/icons-react'
 import { type Locale, useLocale, useTranslations } from 'next-intl'
 import { getPathname, usePathname } from '@/i18n/navigation'
 import { routing } from '@/i18n/routing'
@@ -76,7 +76,7 @@ export function LocaleSwitchButton() {
 						size="lg"
 						aria-label={t('switchLanguage')}
 					>
-						<TranslateIcon size={18} />
+						<IconLanguage size={18} />
 					</ActionIcon>
 				</Menu.Target>
 			</Tooltip>
@@ -89,7 +89,7 @@ export function LocaleSwitchButton() {
 						// A tick on the active entry rather than a checked state: these
 						// navigate, so they're menu items, not radios.
 						rightSection={
-							option === locale ? <CheckIcon size={14} /> : undefined
+							option === locale ? <IconCheck size={14} /> : undefined
 						}
 					>
 						{t(option)}

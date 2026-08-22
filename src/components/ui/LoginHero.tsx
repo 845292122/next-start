@@ -9,27 +9,27 @@
  * image asset — no files to ship, and `currentColor` means it follows the colour
  * scheme for free.
  *
- * A Server Component, so the icons come from `@phosphor-icons/react/ssr`: the
- * package's default build reads an `IconContext` and is therefore client-only. Get
- * this wrong and the page dies with a hooks-in-a-server-component error.
+ * A Server Component. Tabler's icon components are plain forwardRef SVGs with no
+ * context or hooks, so unlike some icon packages they need no special
+ * server-safe import — the same import works here and in a Client Component.
  */
 
 import { Badge, Box, Group, Paper, Text } from '@mantine/core'
 import {
-	DatabaseIcon,
-	PaletteIcon,
-	RocketLaunchIcon,
-	ShieldCheckIcon,
-	SparkleIcon,
-	TranslateIcon,
-} from '@phosphor-icons/react/ssr'
+	IconDatabase,
+	IconLanguage,
+	IconPalette,
+	IconRocket,
+	IconShieldCheck,
+	IconSparkle,
+} from '@tabler/icons-react'
 import { useTranslations } from 'next-intl'
 
 const TAGS = [
-	{ key: 'tagAuth', icon: ShieldCheckIcon },
-	{ key: 'tagDb', icon: DatabaseIcon },
-	{ key: 'tagI18n', icon: TranslateIcon },
-	{ key: 'tagTheme', icon: PaletteIcon },
+	{ key: 'tagAuth', icon: IconShieldCheck },
+	{ key: 'tagDb', icon: IconDatabase },
+	{ key: 'tagI18n', icon: IconLanguage },
+	{ key: 'tagTheme', icon: IconPalette },
 ] as const
 
 export function LoginHero() {
@@ -90,7 +90,7 @@ export function LoginHero() {
 					display="flex"
 					style={{ alignItems: 'center', justifyContent: 'center' }}
 				>
-					<RocketLaunchIcon size={20} />
+					<IconRocket size={20} />
 				</Paper>
 				<Text ff="var(--app-font-serif)" size="lg" fw={600} lts="0.03em">
 					{t('brand')}
@@ -107,7 +107,7 @@ export function LoginHero() {
 					display="flex"
 					style={{ alignItems: 'center', justifyContent: 'center' }}
 				>
-					<SparkleIcon size={20} color="var(--mantine-primary-color-filled)" />
+					<IconSparkle size={20} color="var(--mantine-primary-color-filled)" />
 				</Paper>
 				<Box w={64} h={1} bg="var(--mantine-primary-color-light-color)" />
 			</Group>
@@ -164,7 +164,7 @@ export function LoginHero() {
 					display="flex"
 					style={{ alignItems: 'center', justifyContent: 'center' }}
 				>
-					<ShieldCheckIcon
+					<IconShieldCheck
 						size={20}
 						color="var(--mantine-primary-color-filled)"
 					/>

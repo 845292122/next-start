@@ -16,7 +16,7 @@ import {
 	useComputedColorScheme,
 	useMantineColorScheme,
 } from '@mantine/core'
-import { MoonIcon, SunIcon } from '@phosphor-icons/react'
+import { IconMoon, IconSun } from '@tabler/icons-react'
 import { useTranslations } from 'next-intl'
 
 export type ColorMode = 'light' | 'dark'
@@ -70,7 +70,7 @@ export function useColorModeValue<T>(light: T, dark: T) {
 
 export function ColorModeIcon() {
 	const { colorMode } = useColorMode()
-	return colorMode === 'dark' ? <MoonIcon size={18} /> : <SunIcon size={18} />
+	return colorMode === 'dark' ? <IconMoon size={18} /> : <IconSun size={18} />
 }
 
 /** The light/dark toggle that sits at the bottom of the rail. */

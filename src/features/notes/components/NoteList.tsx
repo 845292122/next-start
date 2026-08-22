@@ -15,11 +15,7 @@ import {
 	TextInput,
 } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
-import {
-	MagnifyingGlassIcon,
-	NotePencilIcon,
-	TrashIcon,
-} from '@phosphor-icons/react'
+import { IconPencil, IconSearch, IconTrash } from '@tabler/icons-react'
 import { useFormatter, useTranslations } from 'next-intl'
 import { useState } from 'react'
 import useSWR from 'swr'
@@ -147,7 +143,7 @@ export function NoteList({
 				onChange={(event) => setQuery(event.currentTarget.value)}
 				aria-label={t('searchLabel')}
 				placeholder={t('searchPlaceholder')}
-				leftSection={<MagnifyingGlassIcon size={16} />}
+				leftSection={<IconSearch size={16} />}
 				rightSection={
 					query ? (
 						<CloseButton
@@ -216,7 +212,7 @@ export function NoteList({
 									aria-label={t('deleteLabel', { title: note.title })}
 									onClick={() => remove(note)}
 								>
-									<TrashIcon size={16} />
+									<IconTrash size={16} />
 								</ActionIcon>
 							</Group>
 						</Paper>
@@ -225,7 +221,7 @@ export function NoteList({
 			) : (
 				<EmptyState
 					py="xl"
-					icon={<NotePencilIcon size={32} />}
+					icon={<IconPencil size={32} />}
 					title={query ? t('noResults') : t('empty')}
 					description={query ? t('noResultsHint') : t('emptyHint')}
 				/>

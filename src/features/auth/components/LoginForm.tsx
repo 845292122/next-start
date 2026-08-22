@@ -13,10 +13,10 @@ import {
 import { type FormErrors, schemaResolver, useForm } from '@mantine/form'
 import { notifications } from '@mantine/notifications'
 import {
-	PhoneIcon,
-	ShieldCheckIcon,
-	WechatLogoIcon,
-} from '@phosphor-icons/react'
+	IconBrandWechat,
+	IconPhone,
+	IconShieldCheck,
+} from '@tabler/icons-react'
 import { signIn } from 'next-auth/react'
 import { useTranslations } from 'next-intl'
 import { useEffect, useState } from 'react'
@@ -159,7 +159,7 @@ export function LoginForm() {
 					// leftSection is the supported way to put an affix inside a field: it
 					// sits inside the input's own border and shifts the text padding, so
 					// an absolutely positioned icon isn't needed and can't overlap typing.
-					leftSection={<PhoneIcon size={18} />}
+					leftSection={<IconPhone size={18} />}
 					key={form.key('phone')}
 					{...form.getInputProps('phone')}
 				/>
@@ -169,7 +169,7 @@ export function LoginForm() {
 					inputMode="numeric"
 					autoComplete="one-time-code"
 					placeholder={t('codePlaceholder')}
-					leftSection={<ShieldCheckIcon size={18} />}
+					leftSection={<IconShieldCheck size={18} />}
 					rightSection={
 						<Button
 							variant="subtle"
@@ -249,7 +249,7 @@ export function LoginForm() {
 				fullWidth
 				fw={600}
 				disabled
-				leftSection={<WechatLogoIcon size={22} color="#07C160" />}
+				leftSection={<IconBrandWechat size={22} color="#07C160" />}
 			>
 				{t('wechatButton')}
 			</Button>

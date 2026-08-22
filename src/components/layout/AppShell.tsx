@@ -1,7 +1,7 @@
 'use client'
 
 import { ActionIcon, Box, Flex, Progress, Stack, Tooltip } from '@mantine/core'
-import type { Icon } from '@phosphor-icons/react'
+import type { TablerIcon } from '@tabler/icons-react'
 // useLinkStatus still comes from next/link — the Link below wraps it, so the
 // hook reads the same context.
 import { useLinkStatus } from 'next/link'
@@ -57,7 +57,7 @@ function NavItem({
 	onPending,
 }: {
 	label: string
-	icon: Icon
+	icon: TablerIcon
 	href: string
 	active: boolean
 	onPending: (delta: number) => void

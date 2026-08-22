@@ -3,7 +3,7 @@
 import { Button, Stack, Textarea, TextInput } from '@mantine/core'
 import { type FormErrors, schemaResolver, useForm } from '@mantine/form'
 import { notifications } from '@mantine/notifications'
-import { PlusIcon } from '@phosphor-icons/react'
+import { IconPlus } from '@tabler/icons-react'
 import { useTranslations } from 'next-intl'
 import { useSWRConfig } from 'swr'
 import { createNoteAction } from '@/features/notes/actions'
@@ -118,7 +118,7 @@ export function NoteForm() {
 				<Button
 					type="submit"
 					loading={form.submitting}
-					leftSection={<PlusIcon size={16} />}
+					leftSection={<IconPlus size={16} />}
 					style={{ alignSelf: 'flex-start' }}
 				>
 					{t('submit')}

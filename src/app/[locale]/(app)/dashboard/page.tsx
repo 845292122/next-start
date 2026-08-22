@@ -23,13 +23,13 @@ import {
 } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
 import {
-	BellIcon,
-	type Icon,
-	InfoIcon,
-	LightningIcon,
-	PaletteIcon,
-	StackIcon,
-} from '@phosphor-icons/react'
+	IconBell,
+	IconBolt,
+	IconInfoCircle,
+	IconPalette,
+	IconStack,
+	type TablerIcon,
+} from '@tabler/icons-react'
 import { useTranslations } from 'next-intl'
 import { useState } from 'react'
 
@@ -50,7 +50,7 @@ function StatCard({
 	label: string
 	value: string
 	hint: string
-	icon: Icon
+	icon: TablerIcon
 }) {
 	return (
 		<Card withBorder padding="lg" radius="md">
@@ -138,19 +138,19 @@ export default function Dashboard() {
 						label={t('stats.layout.label')}
 						value={t('stats.layout.value')}
 						hint={t('stats.layout.hint')}
-						icon={StackIcon}
+						icon={IconStack}
 					/>
 					<StatCard
 						label={t('stats.theme.label')}
 						value={t('stats.theme.value')}
 						hint={t('stats.theme.hint')}
-						icon={PaletteIcon}
+						icon={IconPalette}
 					/>
 					<StatCard
 						label={t('stats.platform.label')}
 						value={t('stats.platform.value')}
 						hint={t('stats.platform.hint')}
-						icon={LightningIcon}
+						icon={IconBolt}
 					/>
 				</SimpleGrid>
 
@@ -255,7 +255,7 @@ export default function Dashboard() {
 								<Button
 									size="xs"
 									variant="light"
-									leftSection={<BellIcon size={16} />}
+									leftSection={<IconBell size={16} />}
 									onClick={() =>
 										notifications.show({
 											color: 'teal',
@@ -359,7 +359,7 @@ export default function Dashboard() {
 								key={role}
 								color={role}
 								variant="light"
-								icon={<InfoIcon size={18} />}
+								icon={<IconInfoCircle size={18} />}
 								title={t('surfaces.alertTitle', { status: role })}
 							>
 								{t('surfaces.alertBody')}

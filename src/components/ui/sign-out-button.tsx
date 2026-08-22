@@ -2,7 +2,7 @@
 
 import { ActionIcon, Button, Group, Modal, Text, Tooltip } from '@mantine/core'
 import { useDisclosure } from '@mantine/hooks'
-import { SignOutIcon } from '@phosphor-icons/react'
+import { IconLogout } from '@tabler/icons-react'
 import { signOut } from 'next-auth/react'
 import { useTranslations } from 'next-intl'
 
@@ -30,7 +30,7 @@ export function SignOutButton() {
 					aria-label={t('signOut')}
 					onClick={open}
 				>
-					<SignOutIcon size={18} />
+					<IconLogout size={18} />
 				</ActionIcon>
 			</Tooltip>
 

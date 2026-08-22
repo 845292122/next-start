@@ -1,5 +1,5 @@
 import { Center, Stack, Text, ThemeIcon, Title } from '@mantine/core'
-import { LockIcon } from '@phosphor-icons/react/ssr'
+import { IconLock } from '@tabler/icons-react'
 import { getTranslations } from 'next-intl/server'
 import { ButtonLink } from '@/components/ui/ButtonLink'
 
@@ -7,8 +7,6 @@ import { ButtonLink } from '@/components/ui/ButtonLink'
  * Nothing redirects here yet: the (app) layout's guard covers "not signed in",
  * and there is no role model to fail. This is the page a role check should send an
  * authenticated-but-unauthorized user to.
- *
- * Icons from `@phosphor-icons/react/ssr` — see the note in [locale]/not-found.tsx.
  */
 export default async function NoPermission() {
 	const t = await getTranslations('Errors')
@@ -17,7 +15,7 @@ export default async function NoPermission() {
 		<Center mih="60vh" p="lg">
 			<Stack align="center" gap="md" maw={400} ta="center">
 				<ThemeIcon color="red" variant="light" size={72} radius="xl">
-					<LockIcon size={36} />
+					<IconLock size={36} />
 				</ThemeIcon>
 				<Title order={1}>403</Title>
 				<Text c="dimmed">{t('forbidden')}</Text>

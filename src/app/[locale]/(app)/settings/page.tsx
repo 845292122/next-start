@@ -11,7 +11,7 @@ import {
 	Text,
 	Title,
 } from '@mantine/core'
-import { DesktopIcon, MoonIcon, SunIcon } from '@phosphor-icons/react'
+import { IconDeviceDesktop, IconMoon, IconSun } from '@tabler/icons-react'
 import { useTranslations } from 'next-intl'
 import { type ThemeMode, useColorMode } from '@/components/ui/color-mode'
 
@@ -58,7 +58,7 @@ export default function Settings() {
 								value: 'auto',
 								label: (
 									<Group gap={6} justify="center" wrap="nowrap">
-										<DesktopIcon size={16} />
+										<IconDeviceDesktop size={16} />
 										{t('appearance.system')}
 									</Group>
 								),
@@ -67,7 +67,7 @@ export default function Settings() {
 								value: 'light',
 								label: (
 									<Group gap={6} justify="center" wrap="nowrap">
-										<SunIcon size={16} />
+										<IconSun size={16} />
 										{t('appearance.light')}
 									</Group>
 								),
@@ -76,7 +76,7 @@ export default function Settings() {
 								value: 'dark',
 								label: (
 									<Group gap={6} justify="center" wrap="nowrap">
-										<MoonIcon size={16} />
+										<IconMoon size={16} />
 										{t('appearance.dark')}
 									</Group>
 								),

@@ -41,7 +41,7 @@ bun run dev
 | 运行时 / 包管理 | Bun 1.3 |
 | 框架 | Next.js 16（App Router，Server Components 默认） |
 | UI | Mantine 9（CSS Modules + CSS 变量，没有 Tailwind） |
-| 图标 | `@phosphor-icons/react`（Mantine 官方文档用的那套） |
+| 图标 | `@tabler/icons-react`（Mantine 官方文档和大部分官方模板用的那套） |
 | 数据库 / ORM | SQLite（`@libsql/client`）+ Drizzle 0.45 |
 | 认证 | Auth.js（next-auth 5 beta）+ `@auth/drizzle-adapter`；cookie 与 Bearer 两种传输共用一个验证核心 |
 | 国际化 | next-intl 4（中英双语） |

@@ -40,7 +40,7 @@
 | 框架 | Next.js 16.3.1 | App Router，Server Components 默认 |
 | UI | Mantine 9.5.1 | 组件自带尺寸/间距 props；主题是一个 TS 对象 |
 | 样式 | CSS Modules + `postcss-preset-mantine` | **没有 Tailwind**，也没有任何 utility class |
-| 图标 | `@phosphor-icons/react` | Mantine 官方文档和部分 `@mantine/*` 包用的就是这套 |
+| 图标 | `@tabler/icons-react` | Mantine 官方文档、demo 和大部分官方模板默认用的就是这套（两者同一个作者）；纯 forwardRef SVG,没有 context/hooks,Server/Client Component 都能直接 import,不需要单独的 `/ssr` 入口 |
 | 数据库 | SQLite | 单文件，无需服务或容器；驱动是 `@libsql/client` |
 | ORM / 迁移 | Drizzle 0.45 + drizzle-kit 0.31 | schema 就是 TS，迁移 SQL 进版本库 |
 | 认证 | Auth.js（next-auth 5 beta） | Credentials provider + JWT session + `@auth/drizzle-adapter` |
