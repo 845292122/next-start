@@ -17,6 +17,10 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
   Route Handler.
 - **Route Handlers are for consumers outside this Next.js app only** — third-party callers,
   mobile clients, webhooks, or framework-mandated callbacks (`api/auth/[...nextauth]`).
+- **Never make a route accept both a cookie and a Bearer token.** `/api/v1/*` is Bearer-only
+  (`getRequiredBearerSession`) and that is what makes it CSRF-free by construction; everything
+  else is cookie-only. Merging them silently reopens a CSRF surface — see
+  `src/core/auth/verify.ts` and the assertion in `e2e/api-v1.e2e.ts`.
 - **Never write SQL in a page, Route Handler, or Server Action.** All data access goes through
   `src/core/services/`; everything else only calls those functions.
 - **Never log a raw URL, and never put user data in an exception message.** Paths go through

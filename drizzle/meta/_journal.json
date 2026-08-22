@@ -15,6 +15,13 @@
 			"when": 1787321135004,
 			"tag": "0001_left_lady_vermin",
 			"breakpoints": true
+		},
+		{
+			"idx": 2,
+			"version": "6",
+			"when": 1787367623873,
+			"tag": "0002_little_thunderbird",
+			"breakpoints": true
 		}
 	]
 }

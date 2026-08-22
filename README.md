@@ -43,7 +43,7 @@ bun run dev
 | UI | HeroUI 3 + Tailwind CSS 4（底层是 react-aria-components） |
 | 图标 | lucide-react |
 | 数据库 / ORM | SQLite（`@libsql/client`）+ Drizzle 0.45 |
-| 认证 | Auth.js（next-auth 5 beta）+ `@auth/drizzle-adapter` |
+| 认证 | Auth.js（next-auth 5 beta）+ `@auth/drizzle-adapter`；cookie 与 Bearer 两种传输共用一个验证核心 |
 | 国际化 | next-intl 4（中英双语） |
 | 表单 / 校验 | react-hook-form + Zod 4 |
 | 客户端数据 | SWR 2 |
@@ -71,8 +71,11 @@ bun run dev
 
 1. 改 `package.json` 的 `name`、`src/i18n/messages/*.json` 里的 `Meta`。
 2. 不需要示例业务就删掉 `src/features/notes/`、`src/core/services/notes-service*.ts`、
-   `src/app/api/notes/`、`src/app/[locale]/(app)/notes/`，以及 `NavLinks.ts` 里那一条、
-   `e2e/notes.e2e.ts` 和 `e2e/api-errors.e2e.ts`。
+   `src/app/api/notes/`、`src/app/api/v1/notes/`、`src/app/[locale]/(app)/notes/`，以及
+   `NavLinks.ts` 里那一条、`e2e/notes.e2e.ts` 和 `e2e/api-errors.e2e.ts`。
+   不做微信小程序的话再删 `src/core/auth/wechat.ts`（含测试）、`src/app/api/v1/`、
+   `src/features/auth/schema.ts` 和 `e2e/api-v1.e2e.ts`；`core/auth/verify.ts` 留着，
+   cookie 那条传输在用。
    > `src/core/` 下的 `errors.ts` / `action.ts` / `http.ts` / `validation.ts` /
    > `request-id.ts` / `security-headers.ts` / `rate-limit.ts` / `zod-config.ts`、
    > `src/instrumentation.ts`、`src/app/api/health/`，以及它们的 `*.test.ts` 和

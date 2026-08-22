@@ -18,6 +18,7 @@
 - [UI 与主题](#ui-与主题)
   - [什么该写进 globals.css](#什么该写进-globalscss)
 - [认证](#认证)
+  - [多端认证:一个验证核心,两种传输](#多端认证一个验证核心两种传输)
 - [国际化](#国际化)
   - [SEO 与元数据](#seo-与元数据)
 - [编码规范](#编码规范)
@@ -81,6 +82,9 @@ src/app/
 ├── api/                # Route Handlers —— 注意在 [locale] 之外
 │   ├── auth/[...nextauth]/
 │   ├── health/         # 健康检查（不鉴权），见[可观测性](#可观测性)
+│   ├── v1/             # 只认 Bearer 的对外 API（小程序/App）
+│   │   ├── auth/wechat/    # 唯一不鉴权的 v1 路由：换 token
+│   │   └── notes/
 │   └── notes/          # 外部消费者路径的示例，应用自己不调
 ├── robots.ts           # /robots.txt —— 在 [locale] 外面（按 origin）
 ├── sitemap.ts          # /sitemap.xml —— 同上
@@ -179,7 +183,9 @@ src/core/
 │   ├── config.ts       # Auth.js 配置：adapter、providers、callbacks
 │   ├── index.ts        # 导出 handlers / auth / signIn / signOut
 │   ├── schema.ts       # phoneOtpSchema + 固定演示码常量，config 和登录表单共用
-│   ├── session.ts      # getRequiredSession()，没登录抛 UnauthorizedError
+│   ├── session.ts      # getRequiredSession() / getRequiredBearerSession()
+│   ├── verify.ts       # 一个验证核心 + 两种传输，见[多端认证](#多端认证一个验证核心两种传输)
+│   ├── wechat.ts       # 小程序登录的诚实占位(jscode2session)
 │   └── otp.ts          # 手机验证码的 stub，见"认证"一节
 ├── services/           # 业务逻辑 + 对应的 .test.ts
 ├── mailer/             # Resend 封装 + templates/*.tsx
@@ -987,7 +993,87 @@ provider + JWT session。手机号+验证码登录本身就是注册——第一
 - 登录成功后 `router.refresh()` 要在 `router.push()` **之前**：守卫是在服务端读 session 的，
   不先刷新就可能落到一个"还没登录"的旧渲染上，被弹回 `/login`。
 
-## 国际化
+### 多端认证:一个验证核心,两种传输
+
+浏览器和微信小程序没法用同一种方式携带会话,而差别**只在凭据存在哪里**:
+
+| 客户端 | 传输 | 为什么 |
+| --- | --- | --- |
+| 浏览器 | httpOnly cookie | JS 读不到,XSS 偷不走;`SameSite=Lax` 是[安全](#安全)那节 CSRF 论证的前提 |
+| 小程序 / 原生 App | `Authorization: Bearer` | `wx.request` 没有可靠的 cookie jar |
+
+[core/auth/verify.ts](src/core/auth/verify.ts) 就是这条界线:
+
+```
+sessionFromCookie()          → auth()           ← 浏览器
+sessionFromBearer(request)   → decode(JWE)      ← 小程序 / App
+requireSession(session)      → UnauthorizedError ← 共用的那一半
+```
+
+**分界到这里就停了。** 两条传输都产出 `Session`,而 `core/services/` 永远不知道用的是哪条——
+它只收 `userId`。加第三个端是加一个 `sessionFrom*`,service 层一行不改。
+
+#### 为什么两条传输**不能**合并
+
+写一个"cookie 和 header 都试一遍"的函数会更短。**别这么做。** 同时接受两者的路由重新
+打开了 CSRF 面:浏览器会自动带上 cookie,于是一个跨站表单提交就能在 Bearer 端点上完成认证。
+分开之后每个表面的安全论证都独立且简单:
+
+- Server Actions 和 `/api/notes` → **只认 cookie**
+- `/api/v1/*` → **只认 Bearer**,所以它**天生**没有 CSRF 面
+
+`e2e/api-v1.e2e.ts` 里那条 `refuses a cookie-authenticated request` 就是守这个的——它跑在
+**已登录**的 storageState 下,所以请求确实带着 cookie,401 才有意义。**那个文件里其余的用例
+在有人"顺手"加上 cookie 回退之后依然会通过,只有这一条会红。**
+
+#### token 的几个取舍
+
+- **用 Auth.js 自己的 `encode`/`decode`**,不手搓 JWT:已经是依赖、产出的是加密(JWE)而非
+  仅签名的 token、密钥从 `AUTH_SECRET` 派生——不用管第二个 secret。
+- **salt 是我们自己的常量**(`api-v1-bearer`)。cookie 会话和 Bearer token 共用
+  `AUTH_SECRET`,不同的 salt 才能阻止其中一个被当作另一个重放。有用例守这条。
+- ⚠️ **没有 refresh token,也没有吊销名单。** 签出去的 token 到期前一直有效;轮转
+  `AUTH_SECRET` 会一次性作废全部,这是目前唯一的吊销手段。做模板可以,**要"退出这一台设备"
+  就不行**。
+
+#### 微信小程序这一侧
+
+[core/auth/wechat.ts](src/core/auth/wechat.ts) 是和 `otp.ts` 同样的**诚实占位**:
+`WECHAT_APPID` / `WECHAT_SECRET` 不设时它**不调微信**,而是从 code 派生一个确定性的假 openid——
+所以整条链路(签 token → 带着它调 `/api/v1` → 读到按 userId 隔离的数据)没有凭据也能端到端跑通,
+`e2e/api-v1.e2e.ts` 正是靠这个。
+
+真接的时候四件事要对,占位教不了你:
+
+1. **微信用 HTTP 200 返回错误。** 判 `errcode`,不要判 status。`40029` 是 code 失效,
+   映射成 401 而不是 500。**这是最容易搞错的一条**,所以它有单测(用注入的凭据 + 打桩的
+   `fetch`,不联网)。
+2. **code 一次性,约 5 分钟过期。** 不要缓存、不要重试。
+3. **`session_key` 绝不下发**,而且每次 `wx.login()` 都轮转。要用(解密手机号、签名校验)
+   就单独建表存,见 `usersTable.openid` 的注释。
+4. **`unionid` 只有开放平台账号才有。** 有的话应该拿它做账号主键,这样同一个人在你的多个
+   应用里是一个用户。
+
+手机号是**另一个接口**(`getPhoneNumber` 给客户端一个 code,你在服务端换),**不复用
+`otp.ts` 那条手机号登录路径**。它的配额和收费政策变过几次,查最新文档,别照抄任何二手说法。
+
+> 凭据是**注入**的而不是 mock `@/core/env`:bun 的 `mock.module` 是进程级的,在一个测试文件里
+> mock env 会静默改掉整轮的 `DATABASE_URL` 和 `LOG_LEVEL`——这个坑这个仓库已经踩过一次
+> (见 `test/unit-setup.ts`)。参数不会泄漏。
+
+#### 两个表面的对照
+
+| | `/api/notes` | `/api/v1/notes` |
+| --- | --- | --- |
+| 传输 | cookie | **只有 Bearer** |
+| 消费者 | cookie 型 handler 的示例 | 微信小程序 / 原生 App |
+| CSRF | 靠 `SameSite=Lax` + 预检 | **结构上就没有** |
+| 版本化 | 无 | `/api/v1`,从第一个端点就有 |
+
+**`/api/v1` 从第一天就带版本前缀。** 小程序是灰度发布的,老版本会继续调老形状一段时间,
+所以你需要一个能放 v2 而不破坏它们的地方。现在只花一个路径段,事后再加很痛。
+
+## 国际化## 国际化
 
 中英双语，`zh` 是默认语言也是文案的**源语言**（`en.json` 是它的翻译）。
 
@@ -1238,6 +1324,8 @@ stat -f %m data/dev.db && bun run test:unit && stat -f %m data/dev.db   # 两个
   `app/api/notes/` 真的接上了它——那里面每一个状态码在包装器出现之前都是 500
 - **`e2e/observability.e2e.ts` 守请求 id 链路和健康检查。** 这两样没法单测：整件事的前提是
   `src/proxy.ts` 真的在跑，而 proxy 只存在于一个运行中的 Next 服务里
+- **`e2e/api-v1.e2e.ts` 守 Bearer 表面。** 其中 `refuses a cookie-authenticated request` 是整个
+  文件存在的理由——它跑在已登录的 storageState 下,所以请求带着 cookie,401 才有意义
 - **`e2e/a11y.e2e.ts` 用 axe 扫 5 个页面。** 它一次就扫出三个真问题，见[工程化关卡](#工程化关卡)
 - **`e2e/seo.e2e.ts` 守 canonical / hreflang / robots / sitemap / manifest。** 这一块每种错法
   都是静默的，只有断言能发现
@@ -1387,8 +1475,12 @@ fetcher，在 fetcher 里把 `ActionResult` 拆开（失败就 `throw`，这样 
   跑"），`schema.ts` 未覆盖的是 drizzle 的 `$defaultFn` / `$onUpdate` 回调（那是数据不是逻辑，
   效果由 `notes-service.test.ts` 断言）。
 - **这个百分比本身是偏高的。** 覆盖率只统计**被加载过**的文件，所以 `core/mailer/`、
-  `core/storage/`、`core/auth/config.ts` 这些没有测试的文件压根不出现在报告里。它是防回归的
-  棘轮，不是"我们测了多少"的答案。
+  `core/storage/` 这些没有测试的文件压根不出现在报告里。它是防回归的棘轮，不是"我们测了多少"
+  的答案。
+- **推论:加一个测试可能让报告里的数字变低。** 加 `core/auth/verify.test.ts` 时就发生了——它
+  import 了 `@/core/auth`，于是 `core/auth/config.ts` 和 `core/zod-config.ts` 第一次被加载、
+  第一次出现在报告里，双双拖低总数并卡住了阈值。两者最后进了 ignore 列表，理由写在
+  `bunfig.toml` 里。**看到数字掉了先想"是不是拉进来了新文件",而不是"是不是覆盖变差了"。**
 
 ### Git 钩子
 
@@ -1563,6 +1655,7 @@ migrator 是[单独打包](src/core/db/migrate-cli.ts)的，因为运行时镜�
 | `APP_URL` | 否（**生产必设**） | `http://localhost:3000` | 对外的 origin，用来生成 canonical / hreflang / sitemap / OG 的绝对地址，见 [SEO 与元数据](#seo-与元数据)。通常和 `AUTH_URL` 同值。**填错是静默的**——发布出去的是 localhost |
 | `LOG_LEVEL` | 否 | `info` | pino 级别 |
 | `RESEND_API_KEY` | 否 | — | 不填时 `sendEmail()` 只打 warn 不发信 |
+| `WECHAT_APPID` / `WECHAT_SECRET` | 否 | — | 两个都不填时 `core/auth/wechat.ts` 进占位模式(确定性假 openid,不调微信),`/api/v1` 照样能跑。见[多端认证](#多端认证一个验证核心两种传输) |
 | `EMAIL_FROM` | 否 | `onboarding@resend.dev` | 发件地址。默认是 Resend 的共享测试发件人，**只能发给 API key 所属的那个邮箱**，上线前换成自有已验证域名的地址 |
 
 `NODE_ENV` 在 `src/core/env.ts` 的 schema 里（决定 pino 是否启用 pretty 输出），但**不在

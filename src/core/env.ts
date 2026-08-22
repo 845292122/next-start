@@ -37,6 +37,12 @@ export const env = createEnv({
 		// no mail configuration at all — but it has to be replaced with an address
 		// on a verified domain before any real mail goes out.
 		EMAIL_FROM: z.string().min(1).default('onboarding@resend.dev'),
+		// WeChat mini program credentials. Both unset (the default) puts
+		// core/auth/wechat.ts into its stub mode — it returns a deterministic fake
+		// openid instead of calling WeChat, so the whole /api/v1 path works without
+		// credentials. Set both to go live.
+		WECHAT_APPID: z.string().min(1).optional(),
+		WECHAT_SECRET: z.string().min(1).optional(),
 	},
 	client: {},
 	runtimeEnv: {
@@ -48,6 +54,8 @@ export const env = createEnv({
 		LOG_LEVEL: process.env.LOG_LEVEL,
 		RESEND_API_KEY: process.env.RESEND_API_KEY,
 		EMAIL_FROM: process.env.EMAIL_FROM,
+		WECHAT_APPID: process.env.WECHAT_APPID,
+		WECHAT_SECRET: process.env.WECHAT_SECRET,
 	},
 	// A bare `RESEND_API_KEY=` in .env.local reaches this as "", which is
 	// *present* — so an `.optional()` schema rejects it for being too short

@@ -36,8 +36,20 @@ const nextConfig: NextConfig = {
 	 * which files to copy, and an external package's native `.node` addon has to be
 	 * traced correctly or the server dies at first query. Verified — see
 	 * DEVELOPMENT.md § 部署.
+	 *
+	 * ## Why it's opt-in rather than always on
+	 *
+	 * `output: 'standalone'` and `next start` are mutually exclusive — Next warns
+	 * `"next start" does not work with "output: standalone" configuration`. Leaving it
+	 * on unconditionally therefore breaks the two most-used commands in the repo:
+	 * `bun run start` (what README tells you to run) and `playwright.config.ts`'s
+	 * `webServer`, which builds and then starts.
+	 *
+	 * So the Dockerfile sets `NEXT_OUTPUT=standalone` and nothing else does. Local and
+	 * CI builds stay on the ordinary server; the container build gets the traced
+	 * bundle.
 	 */
-	output: 'standalone',
+	output: process.env.NEXT_OUTPUT === 'standalone' ? 'standalone' : undefined,
 
 	/**
 	 * The fixed-value security headers. The Content-Security-Policy is *not* here —

@@ -24,6 +24,15 @@ coveragePathIgnorePatterns = [
 	# Dev-only scripts that drop and repopulate the database.
 	"src/core/db/seed.ts",
 	"src/core/db/reset.ts",
+	# The Auth.js configuration object. Its "functions" are callbacks the *framework*
+	# invokes (`authorize`, `jwt`, `session`); calling them directly from a unit test
+	# would assert the shape of Auth.js's plumbing more than our logic. The logic that
+	# is ours — rate limiting before the code comparison, and the demo-code check — is
+	# covered by e2e/security.e2e.ts and e2e/auth.e2e.ts.
+	"src/core/auth/config.ts",
+	# Three lines whose only branch is `typeof window !== 'undefined'`. A server-side
+	# unit test can never take it, by construction.
+	"src/core/zod-config.ts",
 ]
 
 # The test files themselves always run to completion, so counting them tells you

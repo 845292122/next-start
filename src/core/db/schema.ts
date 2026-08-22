@@ -33,8 +33,27 @@ export const usersTable = sqliteTable('user', {
 	// Getting the unit wrong here dates every verification to 1970.
 	emailVerified: integer('emailVerified', { mode: 'timestamp_ms' }),
 	image: text('image'),
-	// The actual sign-in identity — see core/auth/otp.ts.
+	// The actual sign-in identity for the web app — see core/auth/otp.ts.
 	phone: text('phone').unique(),
+	/**
+	 * WeChat mini program identity — see core/auth/wechat.ts.
+	 *
+	 * `openid` is per (user, mini program), so it identifies this app's user and
+	 * nothing else. If you also have a WeChat Open Platform account, `unionid` is
+	 * the id that's stable *across* your apps, and that's the one to key a shared
+	 * account on. Not added here because it only exists with Open Platform set up —
+	 * add it when it does.
+	 *
+	 * Nullable and unique, like `phone`: a user may arrive through either door, and
+	 * linking the two (same person, phone + WeChat) is a separate feature this
+	 * template doesn't implement.
+	 *
+	 * `session_key` is deliberately *not* stored: it's needed only for decrypting
+	 * WeChat's encrypted payloads (phone number, for one), it rotates on every
+	 * `wx.login()`, and it must never leave the server. Add a dedicated table for it
+	 * when you implement something that needs it.
+	 */
+	openid: text('openid').unique(),
 })
 
 export const accountsTable = sqliteTable(

@@ -1,7 +1,14 @@
-import { auth } from '@/core/auth'
-import { UnauthorizedError } from '@/core/errors'
+import type { Session } from 'next-auth'
+import {
+	requireSession,
+	sessionFromBearer,
+	sessionFromCookie,
+} from '@/core/auth/verify'
 
 /**
+ * The cookie-transport session, for pages, Server Actions and the cookie-based
+ * Route Handlers.
+ *
  * Throws rather than redirects, and throws a typed error rather than a bare
  * `Error`.
  *
@@ -14,9 +21,24 @@ import { UnauthorizedError } from '@/core/errors'
  * Pages don't normally rely on this for the redirect: `(app)/layout.tsx` has
  * already bounced anyone signed out, so a page reaching this throw means the
  * guard was bypassed or removed — a bug, and it should surface as one.
+ *
+ * Behaviour is unchanged from before the two transports were split; it's now
+ * `requireSession(sessionFromCookie())`, and `core/auth/verify.ts` explains why the
+ * transports must not be merged.
  */
-export async function getRequiredSession() {
-	const session = await auth()
-	if (!session?.user) throw new UnauthorizedError()
-	return session
+export async function getRequiredSession(): Promise<Session> {
+	return requireSession(await sessionFromCookie())
+}
+
+/**
+ * The Bearer-transport session, for `/api/v1/*`.
+ *
+ * **Reads only the `Authorization` header — a cookie on the request is ignored.**
+ * That's what keeps this surface free of CSRF by construction; see the long note in
+ * `core/auth/verify.ts` and the assertion in `e2e/api-v1.e2e.ts`.
+ */
+export async function getRequiredBearerSession(
+	request: Request,
+): Promise<Session> {
+	return requireSession(await sessionFromBearer(request))
 }

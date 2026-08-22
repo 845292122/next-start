@@ -40,6 +40,11 @@ COPY . .
 ENV AUTH_SECRET="build-time-placeholder-not-used-at-runtime"
 ENV NODE_ENV=production
 
+# Opts this build into `output: 'standalone'`. It is off by default because it is
+# incompatible with `next start`, which the repo's own `start` script and the
+# Playwright webServer both use — see next.config.ts.
+ENV NEXT_OUTPUT=standalone
+
 RUN bun run build
 
 # The migrator, bundled for Node because the runtime image has neither Bun nor the
